@@ -39,19 +39,11 @@ function loadMore() {
   loadPosts();
 }
 
-function redditUrl(post: any) {
-  return `https://reddit.com${post.permalink}`;
-}
-
 function scoreColor(score: number) {
   if (score >= 10000) return "#ff4500";
   if (score >= 1000) return "#ff8c00";
   if (score >= 100) return "#ffd700";
   return "var(--text-muted)";
-}
-
-function formatDate(d: string) {
-  return new Date(d).toLocaleDateString();
 }
 
 watch(sort, () => loadPosts(true));

@@ -24,12 +24,6 @@ function redditUrl() {
   return `https://reddit.com${post.value.permalink}`;
 }
 
-function scoreColor(score: number) {
-  if (score >= 100) return "#ff4500";
-  if (score >= 10) return "#ffd700";
-  return "var(--text-muted)";
-}
-
 function formatSnapshots() {
   if (snapshots.value.length < 2) return null;
   const first = snapshots.value[0];
@@ -86,7 +80,7 @@ function formatSnapshots() {
 </template>
 
 <script lang="ts">
-import { defineComponent, h } from "vue";
+import { defineComponent } from "vue";
 
 const CommentThread = defineComponent({
   name: "CommentThread",
@@ -97,7 +91,7 @@ const CommentThread = defineComponent({
       if (score >= 10) return "#ffd700";
       return "var(--text-muted)";
     }
-    return { scoreColor };
+    return { scoreColor, comment: props.comment, depth: props.depth };
   },
   template: `
     <div class="comment" :style="{ marginLeft: depth * 16 + 'px' }">
@@ -175,6 +169,8 @@ export default { components: { CommentThread } };
   line-height: 1.5;
   white-space: pre-wrap;
   color: var(--text-muted);
+  max-height: 200px;
+  overflow-y: auto;
 }
 
 .trend {
@@ -189,15 +185,11 @@ export default { components: { CommentThread } };
 .trend-meta { color: var(--text-muted); }
 
 .comments-title { font-size: 1.1rem; margin-bottom: 1rem; }
-
-.selftext { max-height: 200px; overflow-y: auto; }
-
 .empty { color: var(--text-muted); text-align: center; padding: 2rem; }
 .loading { color: var(--text-muted); }
 </style>
 
 <style>
-/* Global styles for recursive comment component */
 .comment {
   padding: 0.5rem 0;
   border-left: 2px solid var(--border);
