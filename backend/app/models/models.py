@@ -63,12 +63,8 @@ class Comment(Base):
     )
 
     post: Mapped["Post"] = relationship(back_populates="comments")
-    replies: Mapped[list["Comment"]] = relationship(
-        back_populates="parent", foreign_keys=[parent_reddit_id]
-    )
-    parent: Mapped["Comment | None"] = relationship(
-        back_populates="replies", remote_side="Comment.reddit_id", foreign_keys=[parent_reddit_id]
-    )
+
+    # Tree is built manually in routes — parent_reddit_id is a Reddit string ID
 
 
 class Snapshot(Base):
