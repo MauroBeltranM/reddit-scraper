@@ -1,225 +1,279 @@
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, RouterLink } from "vue-router";
 import api from "../api";
+
+interface Comment {
+  id: number;
+  reddit_id: string;
+  author: string | null;
+  score: number;
+  body: string;
+  depth: number;
+  replies: Comment[];
+}
+
+interface Snapshot {
+  score: number;
+  num_comments: number;
+  recorded_at: string;
+}
 
 const route = useRoute();
 const post = ref<any>(null);
-const comments = ref<any[]>([]);
-const snapshots = ref<any[]>([]);
+const comments = ref<Comment[]>([]);
+const snapshots = ref<Snapshot[]>([]);
 const loading = ref(true);
 
-onMounted(load);
+function formatBody(text: string) {
+  // Basic markdown: links, bold, italic
+  return text
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(/\n/g, "<br>");
+}
 
-async function load() {
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const hours = Math.floor(diff / 3600000);
+  if (hours < 1) return "just now";
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function formatSnapDate(d: string) {
+  return new Date(d).toLocaleString();
+}
+
+onMounted(async () => {
   const id = Number(route.params.id);
-  post.value = await api.getPost(id);
-  comments.value = await api.getPostComments(id);
-  snapshots.value = await api.getPostSnapshots(id);
+  const [postData, commentData, snapData] = await Promise.all([
+    api.getPost(id),
+    api.getPostComments(id),
+    api.getPostSnapshots(id),
+  ]);
+  post.value = postData;
+  comments.value = commentData;
+  snapshots.value = snapData;
   loading.value = false;
-}
-
-function redditUrl() {
-  if (!post.value) return "#";
-  return `https://reddit.com${post.value.permalink}`;
-}
-
-function formatSnapshots() {
-  if (snapshots.value.length < 2) return null;
-  const first = snapshots.value[0];
-  const last = snapshots.value[snapshots.value.length - 1];
-  const scoreDiff = last.score - first.score;
-  const commentDiff = last.num_comments - first.num_comments;
-  return { scoreDiff, commentDiff, count: snapshots.value.length };
-}
+});
 </script>
 
 <template>
   <div class="post-detail" v-if="!loading && post">
-    <router-link to="/posts" class="back">← Back to posts</router-link>
+    <RouterLink to="/posts" class="back">← Back to posts</RouterLink>
 
-    <div class="post-card">
-      <div class="post-header">
-        <h1>{{ post.title }}</h1>
-        <div class="post-meta">
-          <span v-if="post.author" class="author">u/{{ post.author }}</span>
-          <span>/r/{{ post.subreddit?.name }}</span>
-          <span class="type-badge">{{ post.post_type }}</span>
-        </div>
-        <div class="post-stats">
-          <span class="stat">▲ {{ post.score }}</span>
-          <span class="stat">💬 {{ post.num_comments }}</span>
-          <span v-if="post.upvote_ratio" class="stat">⚡ {{ (post.upvote_ratio * 100).toFixed(0) }}%</span>
-          <a :href="redditUrl()" target="_blank" class="stat link">Open on Reddit →</a>
-        </div>
-      </div>
-
-      <div v-if="post.selftext" class="selftext">{{ post.selftext }}</div>
-
-      <div v-if="formatSnapshots()" class="trend">
-        <span :class="formatSnapshots()!.scoreDiff >= 0 ? 'trend-up' : 'trend-down'">
-          {{ formatSnapshots()!.scoreDiff >= 0 ? "↑" : "↓" }} {{ Math.abs(formatSnapshots()!.scoreDiff) }} score
-        </span>
-        <span :class="formatSnapshots()!.commentDiff >= 0 ? 'trend-up' : 'trend-down'">
-          {{ formatSnapshots()!.commentDiff >= 0 ? "↑" : "↓" }} {{ Math.abs(formatSnapshots()!.commentDiff) }} comments
-        </span>
-        <span class="trend-meta">({{ formatSnapshots()!.count }} snapshots)</span>
+    <div class="post-header">
+      <h1 class="post-title">{{ post.title }}</h1>
+      <div class="post-meta">
+        <span :class="['type-badge', post.post_type]">{{ post.post_type }}</span>
+        <span v-if="post.subreddit" class="sub">r/{{ post.subreddit.name }}</span>
+        <span v-if="post.author" class="author">by u/{{ post.author }}</span>
+        <span> {{ post.score.toLocaleString() }} ▲</span>
+        <span>💬 {{ post.num_comments }}</span>
+        <a :href="'https://reddit.com' + post.permalink" target="_blank" class="reddit-link">
+          Open on Reddit ↗
+        </a>
       </div>
     </div>
 
-    <h2 class="comments-title">Comments ({{ comments.length }} threads)</h2>
+    <div v-if="post.selftext" class="selftext" v-html="formatBody(post.selftext)"></div>
 
-    <div class="comments">
-      <CommentThread v-for="c in comments" :key="c.id" :comment="c" :depth="0" />
+    <div class="snapshots" v-if="snapshots.length > 1">
+      <h3>📊 Score History</h3>
+      <div class="snap-chart">
+        <div
+          v-for="(snap, i) in snapshots"
+          :key="i"
+          class="snap-bar"
+          :style="{ height: (snap.score / Math.max(...snapshots.map(s => s.score)) * 100) + '%' }"
+          :title="`${snap.score} points · ${snap.num_comments} comments · ${formatSnapDate(snap.recorded_at)}`"
+        />
+      </div>
+      <div class="snap-legend">
+        {{ snapshots.length }} snapshots ·
+        {{ snapshots[0].score }} → {{ snapshots[snapshots.length - 1].score }} points
+      </div>
     </div>
 
-    <div v-if="comments.length === 0" class="empty">No comments scraped yet.</div>
+    <div class="comments-section">
+      <h2>Comments ({{ comments.length }} top threads)</h2>
+      <CommentTree :comments="comments" :format-body="formatBody" :time-ago="timeAgo" />
+    </div>
   </div>
 
   <div v-else class="loading">Loading...</div>
 </template>
 
 <script lang="ts">
-import { defineComponent } from "vue";
+import { defineComponent, type PropType } from "vue";
 
-const CommentThread = defineComponent({
-  name: "CommentThread",
-  props: { comment: Object, depth: { type: Number, default: 0 } },
+const CommentTree = defineComponent({
+  name: "CommentTree",
+  props: {
+    comments: { type: Array as PropType<any[]>, required: true },
+    formatBody: { type: Function, required: true },
+    timeAgo: { type: Function, required: true },
+  },
   setup(props) {
-    function scoreColor(score: number) {
-      if (score >= 100) return "#ff4500";
-      if (score >= 10) return "#ffd700";
-      return "var(--text-muted)";
-    }
-    return { scoreColor, comment: props.comment, depth: props.depth };
+    return { comments: props.comments, formatBody: props.formatBody, timeAgo: props.timeAgo };
   },
   template: `
-    <div class="comment" :style="{ marginLeft: depth * 16 + 'px' }">
-      <div class="comment-header">
-        <span v-if="comment.author" class="comment-author">u/{{ comment.author }}</span>
-        <span v-else class="comment-author deleted">[deleted]</span>
-        <span class="comment-score" :style="{ color: scoreColor(comment.score) }">
-          {{ comment.score }} ▲
-        </span>
-      </div>
-      <div class="comment-body">{{ comment.body }}</div>
-      <div v-if="comment.replies && comment.replies.length" class="comment-replies">
-        <CommentThread
-          v-for="reply in comment.replies.slice(0, 10)"
-          :key="reply.id"
-          :comment="reply"
-          :depth="depth + 1"
-        />
-        <div v-if="comment.replies.length > 10" class="more-replies">
-          +{{ comment.replies.length - 10 }} more replies
+    <div class="comment-tree">
+      <div v-for="c in comments" :key="c.reddit_id" class="comment" :style="{ marginLeft: c.depth * 24 + 'px' }">
+        <div class="comment-header">
+          <span class="comment-score">{{ c.score }} ▲</span>
+          <span v-if="c.author" class="comment-author">u/{{ c.author }}</span>
+          <span v-else class="comment-author deleted">[deleted]</span>
         </div>
+        <div class="comment-body" v-html="formatBody(c.body)"></div>
+        <CommentTree v-if="c.replies?.length" :comments="c.replies" :format-body="formatBody" :time-ago="timeAgo" />
       </div>
     </div>
   `,
 });
 
-export default { components: { CommentThread } };
+export default { components: { CommentTree } };
 </script>
 
 <style scoped>
 .back {
   color: var(--text-muted);
   font-size: 0.85rem;
-  margin-bottom: 1rem;
   display: inline-block;
+  margin-bottom: 1rem;
 }
+
 .back:hover { color: var(--text); }
 
-.post-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-}
+.post-header { margin-bottom: 1.5rem; }
 
-.post-header h1 { font-size: 1.25rem; margin-bottom: 0.5rem; line-height: 1.3; }
+.post-title {
+  font-size: 1.3rem;
+  line-height: 1.4;
+  margin-bottom: 0.5rem;
+}
 
 .post-meta {
   display: flex;
+  align-items: center;
   gap: 0.75rem;
   font-size: 0.8rem;
   color: var(--text-muted);
-  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
 }
 
-.author { color: var(--blue); }
 .type-badge {
-  background: var(--bg-hover);
-  padding: 0.1rem 0.4rem;
-  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
   font-size: 0.7rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  background: var(--bg-hover);
 }
 
-.post-stats { display: flex; gap: 1rem; font-size: 0.85rem; }
-.stat { color: var(--text-muted); }
-.stat.link { color: var(--blue); }
+.type-badge.self { color: #3fb950; }
+.type-badge.link { color: #58a6ff; }
+.type-badge.image { color: #bc8cff; }
+
+.sub { color: var(--accent); font-weight: 500; }
+.author { color: var(--blue); }
+
+.reddit-link {
+  color: var(--blue);
+  font-weight: 500;
+}
 
 .selftext {
-  margin-top: 1rem;
-  padding: 1rem;
-  background: var(--bg-dark);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  font-size: 0.85rem;
-  line-height: 1.5;
-  white-space: pre-wrap;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.snapshots {
+  margin-bottom: 2rem;
+}
+
+.snapshots h3 {
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
   color: var(--text-muted);
-  max-height: 200px;
-  overflow-y: auto;
 }
 
-.trend {
-  margin-top: 1rem;
+.snap-chart {
   display: flex;
-  gap: 1rem;
-  font-size: 0.8rem;
+  align-items: flex-end;
+  gap: 2px;
+  height: 60px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.5rem;
 }
 
-.trend-up { color: var(--green); font-weight: 600; }
-.trend-down { color: #f85149; font-weight: 600; }
-.trend-meta { color: var(--text-muted); }
+.snap-bar {
+  flex: 1;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+  min-height: 2px;
+  transition: height 0.3s;
+}
 
-.comments-title { font-size: 1.1rem; margin-bottom: 1rem; }
-.empty { color: var(--text-muted); text-align: center; padding: 2rem; }
-.loading { color: var(--text-muted); }
-</style>
+.snap-legend {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.3rem;
+}
 
-<style>
+.comments-section h2 {
+  font-size: 1.1rem;
+  margin-bottom: 1rem;
+}
+
 .comment {
   padding: 0.5rem 0;
   border-left: 2px solid var(--border);
-  margin-left: 8px;
-  padding-left: 12px;
+  padding-left: 0.75rem;
+  margin-bottom: 0.25rem;
 }
+
+.comment:hover { border-left-color: var(--accent); }
 
 .comment-header {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
-  font-size: 0.75rem;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.2rem;
 }
 
-.comment-author { color: var(--blue); }
+.comment-score {
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--accent);
+}
+
+.comment-author {
+  font-size: 0.8rem;
+  color: var(--blue);
+}
+
 .comment-author.deleted { color: var(--text-muted); font-style: italic; }
-.comment-score { font-weight: 600; }
 
 .comment-body {
-  font-size: 0.8rem;
-  line-height: 1.4;
+  font-size: 0.85rem;
+  line-height: 1.5;
   color: var(--text);
-  margin-bottom: 0.25rem;
+  overflow-wrap: break-word;
 }
 
-.comment-replies { margin-top: 0.25rem; }
-
-.more-replies {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  padding: 0.25rem 0;
+.comment-body :deep(a) {
+  color: var(--blue);
 }
+
+.loading { color: var(--text-muted); }
 </style>
