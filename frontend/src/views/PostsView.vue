@@ -1,114 +1,148 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from "vue";
+import { useRoute, RouterLink } from "vue-router";
 import api from "../api";
 
-const posts = ref<any[]>([]);
-const subreddits = ref<any[]>([]);
+interface Post {
+  id: number;
+  reddit_id: string;
+  title: string;
+  author: string | null;
+  score: number;
+  num_comments: number;
+  post_type: string;
+  permalink: string;
+  scraped_at: string;
+  subreddit: { id: number; name: string } | null;
+}
+
+const route = useRoute();
+const posts = ref<Post[]>([]);
+const subreddits = ref<{ id: number; name: string }[]>([]);
 const loading = ref(true);
-const sort = ref("score");
-const subredditFilter = ref<number | null>(null);
-const page = ref(0);
-const hasMore = ref(true);
-const pageSize = 50;
+const sortBy = ref("score");
+const currentSubredditId = ref<number | null>(null);
 
-onMounted(load);
-
-async function load() {
-  loading.value = true;
+async function loadSubreddits() {
   subreddits.value = await api.getSubreddits();
-  await loadPosts();
+}
+
+async function loadPosts() {
+  loading.value = true;
+  const params: Record<string, string | number> = { sort: sortBy.value, limit: 100 };
+  if (currentSubredditId.value) {
+    params.subreddit_id = currentSubredditId.value;
+  }
+  posts.value = await api.getPosts(params);
   loading.value = false;
 }
 
-async function loadPosts(reset = false) {
-  if (reset) { page.value = 0; posts.value = []; }
-  const params: Record<string, string | number> = {
-    sort: sort.value,
-    limit: pageSize,
-    offset: page.value * pageSize,
-  };
-  if (subredditFilter.value) params.subreddit_id = subredditFilter.value;
-
-  const batch = await api.getPosts(params);
-  posts.value.push(...batch);
-  hasMore.value = batch.length === pageSize;
-}
-
-function loadMore() {
-  page.value++;
+function setSubreddit(id: number | null) {
+  currentSubredditId.value = id;
   loadPosts();
 }
 
-function scoreColor(score: number) {
-  if (score >= 10000) return "#ff4500";
-  if (score >= 1000) return "#ff8c00";
-  if (score >= 100) return "#ffd700";
-  return "var(--text-muted)";
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const hours = Math.floor(diff / 3600000);
+  if (hours < 1) return "just now";
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
-watch(sort, () => loadPosts(true));
-watch(subredditFilter, () => loadPosts(true));
+function typeBadge(type: string) {
+  const colors: Record<string, string> = {
+    link: "#58a6ff",
+    self: "#3fb950",
+    image: "#bc8cff",
+    video: "#f0883e",
+  };
+  return colors[type] || "var(--text-muted)";
+}
+
+onMounted(() => {
+  loadSubreddits();
+  const qId = route.query.subreddit_id;
+  if (qId) currentSubredditId.value = Number(qId);
+  loadPosts();
+});
 </script>
 
 <template>
-  <div class="posts-page">
+  <div class="posts-view">
     <h1>Posts</h1>
 
-    <div class="filters">
-      <select v-model="subredditFilter">
-        <option :value="null">All subreddits</option>
-        <option v-for="sub in subreddits" :key="sub.id" :value="sub.id">
-          /r/{{ sub.name }}
-        </option>
-      </select>
-      <select v-model="sort">
+    <div class="toolbar">
+      <select v-model="sortBy" @change="loadPosts" class="select">
         <option value="score">Top by Score</option>
         <option value="new">Newest</option>
         <option value="comments">Most Comments</option>
       </select>
+
+      <div class="filter-pills">
+        <button
+          @click="setSubreddit(null)"
+          :class="['pill', { active: !currentSubredditId }]"
+        >
+          All
+        </button>
+        <button
+          v-for="sub in subreddits"
+          :key="sub.id"
+          @click="setSubreddit(sub.id)"
+          :class="['pill', { active: currentSubredditId === sub.id }]"
+        >
+          r/{{ sub.name }}
+        </button>
+      </div>
     </div>
 
     <div v-if="loading" class="loading">Loading...</div>
 
     <div v-else class="post-list">
-      <router-link
+      <RouterLink
         v-for="post in posts"
         :key="post.id"
         :to="`/posts/${post.id}`"
         class="post-card"
       >
-        <div class="post-score" :style="{ color: scoreColor(post.score) }">
-          {{ post.score >= 1000 ? (post.score / 1000).toFixed(1) + "k" : post.score }}
-          <span class="post-score-label">▲</span>
+        <div class="post-score">
+          <span class="score-num">{{ post.score.toLocaleString() }}</span>
+          <span class="score-label">▲</span>
         </div>
         <div class="post-body">
-          <h3>{{ post.title }}</h3>
+          <div class="post-title">{{ post.title }}</div>
           <div class="post-meta">
-            <span v-if="post.author">u/{{ post.author }}</span>
+            <span :style="{ color: typeBadge(post.post_type) }" class="type-badge">{{ post.post_type }}</span>
+            <span v-if="post.subreddit" class="sub">r/{{ post.subreddit.name }}</span>
+            <span v-if="post.author">by u/{{ post.author }}</span>
             <span>💬 {{ post.num_comments }}</span>
-            <span>{{ post.post_type }}</span>
-            <span v-if="post.subreddit">/r/{{ post.subreddit.name }}</span>
+            <span>{{ timeAgo(post.scraped_at) }}</span>
           </div>
         </div>
-      </router-link>
+      </RouterLink>
 
-      <button v-if="hasMore" class="load-more" @click="loadMore">Load more</button>
-      <div v-if="posts.length === 0" class="empty">No posts yet. Scrape some subreddits!</div>
+      <div v-if="!posts.length" class="empty">
+        No posts yet. Scrape a subreddit first.
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
+h1 { margin-bottom: 1rem; }
 
-.filters {
+.toolbar {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
 }
 
-.filters select {
-  padding: 0.5rem 0.75rem;
+.select {
+  padding: 0.4rem 0.6rem;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -116,53 +150,82 @@ h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
   font-size: 0.85rem;
 }
 
-.post-list { display: flex; flex-direction: column; gap: 0.25rem; }
+.filter-pills {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.pill {
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.pill:hover { background: var(--bg-hover); color: var(--text); }
+.pill.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+.post-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
 
 .post-card {
   display: flex;
   gap: 1rem;
-  padding: 0.75rem 1rem;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 6px;
+  padding: 0.75rem;
   color: var(--text);
   transition: background 0.15s;
 }
 
-.post-card:hover { background: var(--bg-hover); }
+.post-card:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent);
+}
 
 .post-score {
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 50px;
-  font-weight: 700;
-  font-size: 1rem;
+  min-width: 60px;
+  color: var(--accent);
 }
 
-.post-score-label { font-size: 0.7rem; color: var(--text-muted); }
+.score-num { font-weight: 700; font-size: 1rem; }
+.score-label { font-size: 0.75rem; color: var(--text-muted); }
 
 .post-body { flex: 1; min-width: 0; }
-.post-body h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.25rem; }
+
+.post-title {
+  font-weight: 500;
+  font-size: 0.95rem;
+  line-height: 1.3;
+  margin-bottom: 0.3rem;
+}
 
 .post-meta {
   display: flex;
+  align-items: center;
   gap: 0.75rem;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--text-muted);
 }
 
-.load-more {
-  margin-top: 1rem;
-  padding: 0.5rem 1rem;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  cursor: pointer;
+.type-badge {
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.7rem;
 }
-.load-more:hover { background: var(--bg-hover); }
 
-.empty { color: var(--text-muted); text-align: center; padding: 2rem; }
+.empty { text-align: center; color: var(--text-muted); padding: 2rem; }
 .loading { color: var(--text-muted); }
 </style>
