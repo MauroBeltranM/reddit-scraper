@@ -1,2 +1,2 @@
-from app.models.models import Comment, Post, Subreddit, Snapshot
-from app.schemas.schemas import ScrapeResult
+from backend.app.models.models import Comment, Post, Subreddit, Snapshot
+from backend.app.schemas.schemas import ScrapeResult
