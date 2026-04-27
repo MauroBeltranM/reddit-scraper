@@ -24,6 +24,9 @@ Thumbs.db
 # Database
 *.db
 
+# Frontend build output (built in Docker)
+backend/static/
+
 # Build
 dist/
 build/
