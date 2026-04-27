@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.config import settings
+from config import settings
 
 engine_kwargs = {"echo": False}
 if settings.is_sqlite:

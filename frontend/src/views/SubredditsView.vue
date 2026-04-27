@@ -2,136 +2,145 @@
 import { ref, onMounted } from "vue";
 import api from "../api";
 
-const subreddits = ref<any[]>([]);
-const newSub = ref("");
-const loading = ref(false);
-const scraping = ref<string | null>(null);
-const scrapeAllLoading = ref(false);
-const scrapeResult = ref<any>(null);
-
-onMounted(loadSubreddits);
-
-async function loadSubreddits() {
-  subreddits.value = await api.getSubreddits();
+interface Subreddit {
+  id: number;
+  name: string;
+  active: boolean;
+  last_scraped_at: string | null;
+  total_posts: number;
 }
 
-async function addSubreddit() {
-  const name = newSub.value.trim().toLowerCase();
+const subreddits = ref<Subreddit[]>([]);
+const newSub = ref("");
+const loading = ref(true);
+const scraping = ref<string | null>(null);
+const scrapingAll = ref(false);
+const lastResult = ref<string | null>(null);
+
+async function load() {
+  subreddits.value = await api.getSubreddits();
+  loading.value = false;
+}
+
+async function add() {
+  const name = newSub.value.trim().toLowerCase().replace(/^r\//, "");
   if (!name) return;
-  loading.value = true;
+  newSub.value = "";
   try {
     await api.addSubreddit(name);
-    newSub.value = "";
-    await loadSubreddits();
+    await load();
   } catch (e: any) {
-    alert(e.response?.data?.detail || "Failed to add subreddit");
-  } finally {
-    loading.value = false;
+    alert(e.response?.data?.detail || "Error adding subreddit");
   }
 }
 
-async function removeSub(id: number) {
+async function remove(id: number) {
   if (!confirm("Remove this subreddit and all its data?")) return;
   await api.removeSubreddit(id);
-  await loadSubreddits();
+  await load();
 }
 
 async function scrape(name: string) {
   scraping.value = name;
-  scrapeResult.value = null;
+  lastResult.value = null;
   try {
-    scrapeResult.value = await api.scrape(name);
-    await loadSubreddits();
+    const res = await api.scrape(name);
+    lastResult.value = `${res.subreddit}: ${res.posts_new} new posts, ${res.comments_total} comments (${res.duration_sec}s)`;
+    await load();
   } catch (e: any) {
-    alert(e.response?.data?.detail || "Scrape failed");
+    lastResult.value = `Error: ${e.response?.data?.detail || e.message}`;
   } finally {
     scraping.value = null;
   }
 }
 
 async function scrapeAll() {
-  scrapeAllLoading.value = true;
-  scrapeResult.value = null;
+  scrapingAll.value = true;
+  lastResult.value = null;
   try {
-    const data = await api.scrapeAll();
-    scrapeResult.value = data;
-    await loadSubreddits();
+    const res = await api.scrapeAll();
+    const summary = res.results
+      .map((r: any) => r.error ? `❌ ${r.subreddit}: ${r.error}` : `✅ ${r.subreddit}: ${r.posts_new} posts, ${r.comments_total} comments`)
+      .join("\n");
+    lastResult.value = summary;
+    await load();
   } catch (e: any) {
-    alert("Scrape all failed");
+    lastResult.value = `Error: ${e.message}`;
   } finally {
-    scrapeAllLoading.value = false;
+    scrapingAll.value = false;
   }
 }
 
-function formatDate(d: string) {
+function formatDate(d: string | null) {
   if (!d) return "Never";
   return new Date(d).toLocaleString();
 }
+
+onMounted(load);
 </script>
 
 <template>
-  <div class="subreddits-page">
+  <div class="subreddits-view">
     <h1>Subreddits</h1>
 
-    <div class="add-form">
+    <div class="add-bar">
       <input
         v-model="newSub"
-        placeholder="e.g. programming"
-        @keyup.enter="addSubreddit"
-        :disabled="loading"
+        placeholder="r/..."
+        @keyup.enter="add"
+        class="input"
       />
-      <button @click="addSubreddit" :disabled="loading || !newSub.trim()">
-        {{ loading ? "Adding..." : "Add" }}
+      <button @click="add" class="btn btn-accent">Add</button>
+      <button @click="scrapeAll" :disabled="scrapingAll" class="btn btn-secondary">
+        {{ scrapingAll ? "Scraping..." : "Scrape All" }}
       </button>
     </div>
 
-    <div class="actions">
-      <button class="btn-scrape-all" @click="scrapeAll" :disabled="scrapeAllLoading || subreddits.length === 0">
-        {{ scrapeAllLoading ? "Scraping..." : "⚡ Scrape All" }}
-      </button>
+    <div v-if="lastResult" class="result-box">
+      <pre>{{ lastResult }}</pre>
     </div>
 
-    <div v-if="scrapeResult" class="scrape-result">
-      <strong>Scrape result:</strong>
-      <pre>{{ JSON.stringify(scrapeResult, null, 2) }}</pre>
-    </div>
+    <div v-if="loading" class="loading">Loading...</div>
 
-    <div class="sub-list">
+    <div v-else class="sub-list">
       <div v-for="sub in subreddits" :key="sub.id" class="sub-card">
         <div class="sub-info">
-          <h3>/r/{{ sub.name }}</h3>
-          <span class="sub-meta">
+          <RouterLink :to="{ path: '/posts', query: { subreddit_id: sub.id } }" class="sub-name">
+            r/{{ sub.name }}
+          </RouterLink>
+          <div class="sub-meta">
             {{ sub.total_posts }} posts · Last scraped: {{ formatDate(sub.last_scraped_at) }}
-          </span>
+          </div>
         </div>
         <div class="sub-actions">
           <button
-            class="btn-scrape"
             @click="scrape(sub.name)"
             :disabled="scraping === sub.name"
+            class="btn btn-small"
           >
-            {{ scraping === sub.name ? "Scraping..." : "Scrape" }}
+            {{ scraping === sub.name ? "..." : "Scrape" }}
           </button>
-          <button class="btn-remove" @click="removeSub(sub.id)">✕</button>
+          <button @click="remove(sub.id)" class="btn btn-small btn-danger">✕</button>
         </div>
       </div>
-      <div v-if="subreddits.length === 0" class="empty">
-        No subreddits yet. Add one above!
+
+      <div v-if="!subreddits.length" class="empty">
+        No subreddits yet. Add one above to start scraping.
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
+h1 { margin-bottom: 1rem; }
 
-.add-form {
+.add-bar {
   display: flex;
   gap: 0.5rem;
   margin-bottom: 1rem;
 }
 
-.add-form input {
+.input {
   flex: 1;
   padding: 0.5rem 0.75rem;
   background: var(--bg-card);
@@ -141,67 +150,106 @@ h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
   font-size: 0.9rem;
 }
 
-.add-form input:focus { outline: none; border-color: var(--accent); }
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
 
-button {
+.btn {
   padding: 0.5rem 1rem;
   border: none;
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.85rem;
-  font-weight: 600;
+  font-weight: 500;
   transition: all 0.15s;
 }
 
-button:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.add-form button { background: var(--accent); color: white; }
-.add-form button:hover:not(:disabled) { background: var(--accent-hover); }
-
-.actions { margin-bottom: 1.5rem; }
-
-.btn-scrape-all {
-  background: var(--green);
-  color: #000;
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
-.btn-scrape-all:hover:not(:disabled) { background: #4cca5c; }
 
-.sub-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.btn-accent {
+  background: var(--accent);
+  color: white;
+}
+
+.btn-accent:hover { background: var(--accent-hover); }
+
+.btn-secondary {
+  background: var(--bg-hover);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-small {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+.btn-danger {
+  background: transparent;
+  color: #f85149;
+  border: 1px solid #f85149;
+}
+
+.btn-danger:hover {
+  background: #f8514920;
+}
+
+.result-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+}
+
+.result-box pre {
+  color: var(--green);
+  margin: 0;
+}
+
+.sub-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
 
 .sub-card {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
 }
 
-.sub-info h3 { font-size: 1rem; color: var(--accent); }
-.sub-meta { font-size: 0.8rem; color: var(--text-muted); }
+.sub-name {
+  font-weight: 600;
+  font-size: 1rem;
+}
 
-.sub-actions { display: flex; gap: 0.5rem; }
-
-.btn-scrape { background: var(--blue); color: #000; }
-.btn-scrape:hover:not(:disabled) { background: #79b8ff; }
-.btn-remove { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
-.btn-remove:hover { color: #f85149; border-color: #f85149; }
-
-.scrape-result {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 1rem;
-  margin-bottom: 1rem;
+.sub-meta {
+  color: var(--text-muted);
   font-size: 0.8rem;
+  margin-top: 0.15rem;
 }
 
-.scrape-result pre {
-  white-space: pre-wrap;
-  color: var(--green);
-  margin-top: 0.5rem;
+.sub-actions {
+  display: flex;
+  gap: 0.4rem;
 }
 
-.empty { color: var(--text-muted); text-align: center; padding: 2rem; }
+.empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 2rem;
+}
+
+.loading { color: var(--text-muted); }
 </style>

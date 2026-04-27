@@ -8,8 +8,8 @@ import feedparser
 import httpx
 from bs4 import BeautifulSoup
 
-from app.models.models import Comment, Post, Subreddit
-from app.schemas.schemas import ScrapeResult
+from models.models import Comment, Post, Subreddit, Snapshot
+from schemas.schemas import ScrapeResult
 
 REDDIT_BASE = "https://www.reddit.com"
 USER_AGENT = "Mozilla/5.0 (compatible; RedditScraper/0.1)"
@@ -83,7 +83,7 @@ class RedditScraper:
             comments_total += len(comments)
 
             # Take initial snapshot
-            from app.models.models import Snapshot
+            from models.models import Snapshot
             db.add(Snapshot(post_id=post.id, score=post.score, num_comments=post.num_comments))
 
         subreddit.last_scraped_at = datetime.now(timezone.utc)
