@@ -39,6 +39,7 @@ class RedditScraper:
         posts_discovered = self._fetch_posts(subreddit_name)
         posts_new = 0
         comments_total = 0
+        new_count = 0
 
         for entry in posts_discovered:
             existing = db.query(Post).filter_by(reddit_id=entry["reddit_id"]).first()
@@ -66,9 +67,11 @@ class RedditScraper:
             db.add(post)
             db.flush()
             posts_new += 1
+            new_count += 1
 
-            # Fetch comments
-            time.sleep(REQUEST_DELAY)
+            # Fetch comments (limit to avoid long scrapes)
+            if new_count <= 10:
+                time.sleep(REQUEST_DELAY)
             comments = self._fetch_comments(entry["permalink"])
             for c in comments:
                 db.add(Comment(
