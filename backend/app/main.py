@@ -6,9 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from backend.app.api.routes import router
-from backend.app.db.session import engine
-from backend.app.models.models import Base
+from app.api.routes import router
+from app.db.session import engine
+from app.models.models import Base
 
 STATIC_DIR = Path("/app/static")
 

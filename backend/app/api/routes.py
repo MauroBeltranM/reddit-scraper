@@ -1,6 +1,6 @@
-from backend.app.db.session import get_db
-from backend.app.models.models import Base, Comment, Post, Snapshot, Subreddit
-from backend.app.schemas.schemas import (
+from app.db.session import get_db
+from app.models.models import Base, Comment, Post, Snapshot, Subreddit
+from app.schemas.schemas import (
     CommentRead,
     DashboardStats,
     PostRead,
@@ -8,4 +8,4 @@ from backend.app.schemas.schemas import (
     SubredditCreate,
     SubredditRead,
 )
-from backend.app.services.scraper import RedditScraper
+from app.services.scraper import RedditScraper
