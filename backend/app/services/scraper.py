@@ -1,7 +1,9 @@
 import re
 import time
+import uuid
 from datetime import datetime, timezone
 from html import unescape
+from typing import Callable
 
 import httpx
 from bs4 import BeautifulSoup
@@ -16,6 +18,43 @@ MAX_COMMENT_DEPTH = 10
 TOP_COMMENTS = 50
 
 
+# --- In-memory task progress store ---
+
+class ScrapeTask:
+    """Tracks progress of a background scrape task."""
+    def __init__(self, task_id: str, subreddit: str):
+        self.task_id = task_id
+        self.subreddit = subreddit
+        self.status: str = "running"  # running | done | error
+        self.progress: int = 0
+        self.total: int = 0
+        self.current_post: str = ""
+        self.posts_found: int = 0
+        self.posts_new: int = 0
+        self.comments_total: int = 0
+        self.duration_sec: float = 0.0
+        self.error: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "task_id": self.task_id,
+            "subreddit": self.subreddit,
+            "status": self.status,
+            "progress": self.progress,
+            "total": self.total,
+            "current_post": self.current_post,
+            "posts_found": self.posts_found,
+            "posts_new": self.posts_new,
+            "comments_total": self.comments_total,
+            "duration_sec": self.duration_sec,
+            "error": self.error,
+        }
+
+
+# Global task registry
+tasks: dict[str, ScrapeTask] = {}
+
+
 class RedditScraper:
     def __init__(self):
         self.client = httpx.Client(
@@ -24,8 +63,17 @@ class RedditScraper:
             timeout=30.0,
         )
 
-    def scrape_subreddit(self, db, subreddit_name: str) -> ScrapeResult:
-        """Full scrape: discover posts via JSON, then fetch comments for each."""
+    def scrape_subreddit(
+        self,
+        db,
+        subreddit_name: str,
+        on_progress: Callable[[int, int, str], None] | None = None,
+    ) -> ScrapeResult:
+        """Full scrape: discover posts via JSON, then fetch comments for each.
+
+        Args:
+            on_progress: Optional callback(current, total, post_title) for progress tracking.
+        """
         start = time.time()
 
         # Ensure subreddit exists
@@ -41,7 +89,11 @@ class RedditScraper:
         comments_total = 0
         new_count = 0
 
-        for entry in posts_discovered:
+        for idx, entry in enumerate(posts_discovered):
+            # Report progress
+            if on_progress:
+                on_progress(idx + 1, len(posts_discovered), entry.get("title", "")[:60])
+
             existing = db.query(Post).filter_by(reddit_id=entry["reddit_id"]).first()
             if existing:
                 # Update score/comments

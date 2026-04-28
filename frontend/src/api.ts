@@ -14,6 +14,12 @@ export default {
   scrape: (name: string) => api.post(`/scrape/${name}`).then((r) => r.data),
   scrapeAll: () => api.post("/scrape-all").then((r) => r.data),
 
+  /** Subscribe to SSE progress events for a subreddit scrape */
+  scrapeProgress: (name: string): EventSource => {
+    const base = api.defaults.baseURL || "/api";
+    return new EventSource(`${base}/scrape/${name}/progress`);
+  },
+
   // Posts
   getPosts: (params?: Record<string, string | number>) =>
     api.get("/posts", { params }).then((r) => r.data),

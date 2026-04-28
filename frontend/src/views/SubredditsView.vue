@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import api from "../api";
 
 interface Subreddit {
@@ -10,12 +10,29 @@ interface Subreddit {
   total_posts: number;
 }
 
+interface ProgressData {
+  task_id: string;
+  subreddit: string;
+  status: string;
+  progress: number;
+  total: number;
+  current_post: string;
+  posts_found: number;
+  posts_new: number;
+  comments_total: number;
+  duration_sec: number;
+  error: string;
+}
+
 const subreddits = ref<Subreddit[]>([]);
 const newSub = ref("");
 const loading = ref(true);
 const scraping = ref<string | null>(null);
 const scrapingAll = ref(false);
 const lastResult = ref<string | null>(null);
+const progressData = ref<ProgressData | null>(null);
+
+let eventSource: EventSource | null = null;
 
 async function load() {
   subreddits.value = await api.getSubreddits();
@@ -40,16 +57,46 @@ async function remove(id: number) {
   await load();
 }
 
+function closeEventSource() {
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+}
+
 async function scrape(name: string) {
   scraping.value = name;
   lastResult.value = null;
+  progressData.value = null;
+  closeEventSource();
+
   try {
-    const res = await api.scrape(name);
-    lastResult.value = `${res.subreddit}: ${res.posts_new} new posts, ${res.comments_total} comments (${res.duration_sec}s)`;
-    await load();
+    // Start the scrape (returns immediately with task_id)
+    await api.scrape(name);
+
+    // Connect to SSE for progress
+    eventSource = api.scrapeProgress(name);
+    eventSource.onmessage = (event) => {
+      const data: ProgressData = JSON.parse(event.data);
+      progressData.value = data;
+
+      if (data.status === "done") {
+        lastResult.value = `${data.subreddit}: ${data.posts_new} new posts, ${data.comments_total} comments (${data.duration_sec}s)`;
+        closeEventSource();
+        scraping.value = null;
+        load();
+      } else if (data.status === "error") {
+        lastResult.value = `Error: ${data.error}`;
+        closeEventSource();
+        scraping.value = null;
+      }
+    };
+    eventSource.onerror = () => {
+      closeEventSource();
+      scraping.value = null;
+    };
   } catch (e: any) {
     lastResult.value = `Error: ${e.response?.data?.detail || e.message}`;
-  } finally {
     scraping.value = null;
   }
 }
@@ -57,17 +104,41 @@ async function scrape(name: string) {
 async function scrapeAll() {
   scrapingAll.value = true;
   lastResult.value = null;
+  progressData.value = null;
+  closeEventSource();
+
   try {
     const res = await api.scrapeAll();
-    const summary = res.results
-      .map((r: any) => r.error ? `❌ ${r.subreddit}: ${r.error}` : `✅ ${r.subreddit}: ${r.posts_new} posts, ${r.comments_total} comments`)
-      .join("\n");
-    lastResult.value = summary;
-    await load();
+    // For scrape-all, we just wait a bit and reload
+    // The tasks run in parallel, poll the last subreddit's progress
+    if (res.tasks && res.tasks.length > 0) {
+      // We'll just show a generic progress state
+      scraping.value = "all";
+    }
+
+    // Simple approach: check every 2s if all tasks are done
+    const checkDone = async () => {
+      let allDone = false;
+      while (!allDone) {
+        await new Promise((r) => setTimeout(r, 2000));
+        try {
+          await load();
+          // Check if any subreddit is still being scraped
+          allDone = !scraping.value;
+        } catch {
+          allDone = true;
+        }
+      }
+      scrapingAll.value = false;
+      scraping.value = null;
+      lastResult.value = `Scrape complete. Data refreshed.`;
+      await load();
+    };
+    checkDone();
   } catch (e: any) {
     lastResult.value = `Error: ${e.message}`;
-  } finally {
     scrapingAll.value = false;
+    scraping.value = null;
   }
 }
 
@@ -77,6 +148,7 @@ function formatDate(d: string | null) {
 }
 
 onMounted(load);
+onUnmounted(closeEventSource);
 </script>
 
 <template>
@@ -94,6 +166,23 @@ onMounted(load);
       <button @click="scrapeAll" :disabled="scrapingAll" class="btn btn-secondary">
         {{ scrapingAll ? "Scraping..." : "Scrape All" }}
       </button>
+    </div>
+
+    <!-- Progress indicator -->
+    <div v-if="progressData && progressData.status === 'running'" class="result-box progress-box">
+      <div class="progress-header">
+        🔄 Scraping r/{{ progressData.subreddit }}
+        <span class="progress-count">{{ progressData.progress }} / {{ progressData.total }}</span>
+      </div>
+      <div class="progress-bar-track">
+        <div
+          class="progress-bar-fill"
+          :style="{ width: progressData.total ? (progressData.progress / progressData.total * 100) + '%' : '0%' }"
+        ></div>
+      </div>
+      <div v-if="progressData.current_post" class="progress-detail">
+        {{ progressData.current_post }}
+      </div>
     </div>
 
     <div v-if="lastResult" class="result-box">
@@ -252,4 +341,45 @@ h1 { margin-bottom: 1rem; }
 }
 
 .loading { color: var(--text-muted); }
+
+/* Progress styles */
+.progress-box {
+  border-color: var(--accent);
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.progress-count {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.progress-bar-track {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-hover);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progress-detail {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  margin-top: 0.4rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 </style>
