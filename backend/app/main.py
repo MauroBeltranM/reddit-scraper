@@ -1,4 +1,6 @@
 import asyncio
+import logging
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -9,8 +11,16 @@ from fastapi.responses import FileResponse
 from backend.app.api.routes import router
 from backend.app.db.session import engine
 from backend.app.models.models import Base
+from backend.app.services.scheduler import start_scheduler, stop_scheduler
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path("/app/static")
+
+
+# Auto-scheduler can be disabled via env var
+AUTO_SCRAPE = os.getenv("AUTO_SCRAPE", "true").lower() in ("true", "1", "yes")
 
 
 def create_app() -> FastAPI:
@@ -25,8 +35,15 @@ def create_app() -> FastAPI:
     )
 
     @app.on_event("startup")
-    def startup():
+    async def startup():
         Base.metadata.create_all(bind=engine)
+        if AUTO_SCRAPE:
+            start_scheduler()
+            logger.info("Auto-scraper enabled")
+
+    @app.on_event("shutdown")
+    async def shutdown():
+        stop_scheduler()
 
     # API routes first (registered before static fallback)
     app.include_router(router)

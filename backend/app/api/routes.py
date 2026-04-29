@@ -327,3 +327,31 @@ def dashboard_stats(db: Session = Depends(get_db)):
         total_comments=db.query(Comment).count(),
         total_snapshots=db.query(Snapshot).count(),
     )
+
+
+# --- Scheduler ---
+
+@router.get("/scheduler/status")
+def scheduler_status():
+    from backend.app.services.scheduler import scheduler, SCRAPE_INTERVAL_HOURS
+    if scheduler is None:
+        return {"running": False, "interval_hours": SCRAPE_INTERVAL_HOURS}
+    jobs = scheduler.get_jobs()
+    next_run = None
+    for job in jobs:
+        if job.id == "scrape_all_active":
+            next_run = str(job.next_run_time) if job.next_run_time else None
+            break
+    return {
+        "running": scheduler.running,
+        "interval_hours": SCRAPE_INTERVAL_HOURS,
+        "next_run": next_run,
+    }
+
+
+@router.post("/scheduler/trigger")
+async def scheduler_trigger():
+    """Manually trigger a scrape of all active subreddits."""
+    from backend.app.services.scheduler import scrape_all_active
+    asyncio.ensure_future(scrape_all_active())
+    return {"status": "triggered"}
