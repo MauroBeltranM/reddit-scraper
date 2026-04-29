@@ -183,27 +183,105 @@ def get_post(post_id: int, db: Session = Depends(get_db)):
     return post
 
 
-@router.get("/posts/{post_id}/comments", response_model=list[CommentRead])
-def get_post_comments(post_id: int, db: Session = Depends(get_db)):
+@router.get("/posts/{post_id}/comments")
+def get_post_comments(
+    post_id: int,
+    limit: int = Query(20, le=100),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
     post = db.query(Post).get(post_id)
     if not post:
         raise HTTPException(404, "Post not found")
 
-    all_comments = (
+    # Get root comments with pagination
+    roots = (
         db.query(Comment)
-        .filter(Comment.post_id == post_id)
+        .filter(
+            Comment.post_id == post_id,
+            Comment.parent_reddit_id == None  # noqa: E711
+        )
+        .order_by(Comment.score.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    # Also handle roots that have parent_reddit_id == post.reddit_id
+    alt_roots = (
+        db.query(Comment)
+        .filter(
+            Comment.post_id == post_id,
+            Comment.parent_reddit_id == post.reddit_id,
+        )
         .order_by(Comment.score.desc())
         .all()
     )
 
-    comment_map = {c.reddit_id: c for c in all_comments}
-    roots = [c for c in all_comments if c.parent_reddit_id is None or c.parent_reddit_id == post.reddit_id]
+    # Merge and deduplicate
+    seen = {c.reddit_id for c in roots}
+    for c in alt_roots:
+        if c.reddit_id not in seen:
+            roots.append(c)
+            seen.add(c.reddit_id)
 
-    return sorted(
-        [CommentRead.from_orm_tree(r) for r in roots],
-        key=lambda c: c.score,
-        reverse=True,
+    roots.sort(key=lambda c: c.score, reverse=True)
+    roots = roots[:limit]
+
+    # Count total roots for "has more" logic
+    total_roots = (
+        db.query(Comment)
+        .filter(
+            Comment.post_id == post_id,
+            Comment.parent_reddit_id == None,  # noqa: E711
+        )
+        .count()
     )
+    total_alt = (
+        db.query(Comment)
+        .filter(
+            Comment.post_id == post_id,
+            Comment.parent_reddit_id == post.reddit_id,
+        )
+        .count()
+    )
+    total_roots = max(total_roots, total_alt)
+
+    # Load all non-root comments for this post to build full reply trees
+    non_root_ids = [c.reddit_id for c in roots]
+    all_replies = (
+        db.query(Comment)
+        .filter(
+            Comment.post_id == post_id,
+            Comment.parent_reddit_id.notin_([None, post.reddit_id]),
+        )
+        .all()
+    ) if roots else []
+
+    # Build a temporary parent->children map for all replies
+    reply_map: dict[str, list] = {}
+    for r in all_replies:
+        reply_map.setdefault(r.parent_reddit_id, []).append(r)
+
+    def build_tree(comment):
+        """Recursively build comment tree."""
+        children = reply_map.get(comment.reddit_id, [])
+        node = CommentRead.model_validate(comment)
+        node.replies = sorted(
+            [build_tree(c) for c in children],
+            key=lambda c: c.score,
+            reverse=True,
+        )
+        return node
+
+    result = [build_tree(r) for r in roots]
+
+    return {
+        "comments": result,
+        "total_roots": total_roots,
+        "offset": offset,
+        "limit": limit,
+    }
 
 
 @router.get("/posts/{post_id}/snapshots")

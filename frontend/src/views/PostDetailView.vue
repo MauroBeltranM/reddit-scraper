@@ -24,6 +24,11 @@ const post = ref<any>(null);
 const comments = ref<Comment[]>([]);
 const snapshots = ref<Snapshot[]>([]);
 const loading = ref(true);
+const commentsPage = ref(0);
+const commentsHasMore = ref(true);
+const commentsLoading = ref(false);
+const totalRoots = ref(0);
+const commentsPageSize = 20;
 
 function formatBody(text: string) {
   // Basic markdown: links, bold, italic
@@ -46,17 +51,28 @@ function formatSnapDate(d: string) {
   return new Date(d).toLocaleString();
 }
 
+async function loadMoreComments() {
+  commentsLoading.value = true;
+  const id = Number(route.params.id);
+  const data = await api.getPostComments(id, commentsPageSize, commentsPage.value * commentsPageSize);
+  comments.value.push(...(data.comments || []));
+  totalRoots.value = data.total_roots || 0;
+  commentsHasMore.value = comments.value.length < data.total_roots;
+  commentsPage.value++;
+  commentsLoading.value = false;
+}
+
 onMounted(async () => {
   const id = Number(route.params.id);
-  const [postData, commentData, snapData] = await Promise.all([
+  const [postData, snapData] = await Promise.all([
     api.getPost(id),
-    api.getPostComments(id),
     api.getPostSnapshots(id),
   ]);
   post.value = postData;
-  comments.value = commentData;
   snapshots.value = snapData;
   loading.value = false;
+  // Load first batch of comments
+  await loadMoreComments();
 });
 </script>
 
@@ -98,8 +114,17 @@ onMounted(async () => {
     </div>
 
     <div class="comments-section">
-      <h2>Comments ({{ comments.length }} top threads)</h2>
+      <h2>Comments ({{ totalRoots }} threads, {{ comments.length }} loaded)</h2>
       <CommentTree :comments="comments" :format-body="formatBody" :time-ago="timeAgo" />
+      <button
+        v-if="commentsHasMore && comments.length > 0"
+        class="load-more-comments"
+        :disabled="commentsLoading"
+        @click="loadMoreComments"
+      >
+        {{ commentsLoading ? "Loading..." : "Load more comments" }}
+      </button>
+      <div v-if="comments.length === 0 && !loading" class="empty-comments">No comments yet.</div>
     </div>
   </div>
 
@@ -276,4 +301,21 @@ export default { components: { CommentTree } };
 }
 
 .loading { color: var(--text-muted); }
+
+.load-more-comments {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  display: block;
+  width: 100%;
+  text-align: center;
+}
+.load-more-comments:hover { background: var(--bg-hover); }
+.load-more-comments:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.empty-comments { color: var(--text-muted); text-align: center; padding: 2rem; }
 </style>

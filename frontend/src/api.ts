@@ -24,7 +24,8 @@ export default {
   getPosts: (params?: Record<string, string | number>) =>
     api.get("/posts", { params }).then((r) => r.data),
   getPost: (id: number) => api.get(`/posts/${id}`).then((r) => r.data),
-  getPostComments: (id: number) => api.get(`/posts/${id}/comments`).then((r) => r.data),
+  getPostComments: (id: number, limit = 20, offset = 0) =>
+    api.get(`/posts/${id}/comments`, { params: { limit, offset } }).then((r) => r.data),
   getPostSnapshots: (id: number) => api.get(`/posts/${id}/snapshots`).then((r) => r.data),
 
   // Search
