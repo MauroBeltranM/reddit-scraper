@@ -171,7 +171,10 @@ onUnmounted(closeEventSource);
     <!-- Progress indicator -->
     <div v-if="progressData && progressData.status === 'running'" class="result-box progress-box">
       <div class="progress-header">
-        🔄 Scraping r/{{ progressData.subreddit }}
+        <div class="spinner-label">
+          <span class="spinner"></span>
+          <span>Scraping r/{{ progressData.subreddit }}</span>
+        </div>
         <span class="progress-count">{{ progressData.progress }} / {{ progressData.total }}</span>
       </div>
       <div class="progress-bar-track">
@@ -181,7 +184,12 @@ onUnmounted(closeEventSource);
         ></div>
       </div>
       <div v-if="progressData.current_post" class="progress-detail">
-        {{ progressData.current_post }}
+        📄 Scraping post {{ progressData.progress }}/{{ progressData.total }}: {{ progressData.current_post }}
+      </div>
+      <div class="progress-stats">
+        <span>🆕 {{ progressData.posts_new }} new</span>
+        <span>💬 {{ progressData.comments_total }} comments</span>
+        <span>⏱ {{ progressData.duration_sec ? progressData.duration_sec.toFixed(1) + 's' : '...' }}</span>
       </div>
     </div>
 
@@ -354,6 +362,26 @@ h1 { margin-bottom: 1rem; }
   margin-bottom: 0.5rem;
 }
 
+.spinner-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .progress-count {
   font-size: 0.8rem;
   color: var(--text-muted);
@@ -381,5 +409,13 @@ h1 { margin-bottom: 1rem; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.progress-stats {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }
 </style>
