@@ -100,11 +100,16 @@ class RedditScraper:
 
             existing = db.query(Post).filter_by(reddit_id=entry["reddit_id"]).first()
             if existing:
-                # Update score/comments
+                # Update score/comments and take a new snapshot to track evolution
                 existing.score = entry["score"]
                 existing.num_comments = entry["num_comments"]
                 if entry.get("upvote_ratio"):
                     existing.upvote_ratio = entry["upvote_ratio"]
+                db.add(Snapshot(
+                    post_id=existing.id,
+                    score=existing.score,
+                    num_comments=existing.num_comments,
+                ))
                 continue
 
             post = Post(
