@@ -67,6 +67,13 @@ class Comment(Base):
     # Tree is built manually in routes — parent_reddit_id is a Reddit string ID
 
 
+class Setting(Base):
+    __tablename__ = "settings"
+
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[str] = mapped_column(String(500), nullable=False)
+
+
 class Snapshot(Base):
     __tablename__ = "snapshots"
 

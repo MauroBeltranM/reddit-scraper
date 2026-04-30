@@ -8,6 +8,7 @@ const navItems = [
   { path: "/subreddits", label: "Subreddits", icon: "📡" },
   { path: "/posts", label: "Posts", icon: "📝" },
   { path: "/search", label: "Search", icon: "🔍" },
+  { path: "/settings", label: "Settings", icon: "⚙️" },
 ];
 
 function isActive(path: string) {

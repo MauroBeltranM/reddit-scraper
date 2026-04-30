@@ -56,7 +56,11 @@ tasks: dict[str, ScrapeTask] = {}
 
 
 class RedditScraper:
-    def __init__(self):
+    def __init__(self, max_new_posts=10, top_comments=50, request_delay=1.0, max_comment_depth=10):
+        self.max_new_posts = max_new_posts
+        self.top_comments = top_comments
+        self.request_delay = request_delay
+        self.max_comment_depth = max_comment_depth
         self.client = httpx.Client(
             headers={"User-Agent": USER_AGENT},
             follow_redirects=True,
@@ -122,8 +126,8 @@ class RedditScraper:
             new_count += 1
 
             # Fetch comments (limit to avoid long scrapes)
-            if new_count <= 10:
-                time.sleep(REQUEST_DELAY)
+            if new_count <= self.max_new_posts:
+                time.sleep(self.request_delay)
             comments = self._fetch_comments(entry["permalink"])
             for c in comments:
                 db.add(Comment(
@@ -219,7 +223,7 @@ class RedditScraper:
         queue = [(c["data"], 0) for c in comments_raw if c["kind"] == "t1"]
         # Keep only top N top-level comments
         queue.sort(key=lambda x: x[0].get("score", 0), reverse=True)
-        queue = queue[:TOP_COMMENTS]
+        queue = queue[:self.top_comments]
 
         while queue:
             comment_data, depth = queue.pop(0)
@@ -234,7 +238,7 @@ class RedditScraper:
                 "depth": depth,
             })
 
-            if depth < MAX_COMMENT_DEPTH:
+            if depth < self.max_comment_depth:
                 replies = comment_data.get("replies", {})
                 if isinstance(replies, dict):
                     for reply in replies.get("data", {}).get("children", []):

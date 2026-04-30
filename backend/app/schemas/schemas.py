@@ -97,3 +97,19 @@ class DashboardStats(BaseModel):
     total_posts: int
     total_comments: int
     total_snapshots: int
+
+
+# --- Settings ---
+
+class SettingsRead(BaseModel):
+    max_new_posts: int = 10
+    top_comments: int = 50
+    request_delay: float = 1.0
+    max_comment_depth: int = 10
+
+
+class SettingUpdate(BaseModel):
+    max_new_posts: int | None = None
+    top_comments: int | None = None
+    request_delay: float | None = None
+    max_comment_depth: int | None = None

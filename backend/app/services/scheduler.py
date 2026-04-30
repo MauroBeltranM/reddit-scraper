@@ -22,7 +22,14 @@ def _scrape_subreddit_sync(subreddit_name: str):
     """Scrape a single subreddit synchronously (runs in thread executor)."""
     db = SessionLocal()
     try:
-        scraper = RedditScraper()
+        from backend.app.api.routes import get_settings_dict
+        cfg = get_settings_dict(db)
+        scraper = RedditScraper(
+            max_new_posts=cfg["max_new_posts"],
+            top_comments=cfg["top_comments"],
+            request_delay=cfg["request_delay"],
+            max_comment_depth=cfg["max_comment_depth"],
+        )
         result = scraper.scrape_subreddit(db, subreddit_name)
         db.commit()
         logger.info(

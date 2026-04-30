@@ -34,4 +34,8 @@ export default {
 
   // Stats
   getStats: () => api.get("/stats").then((r) => r.data),
+
+  // Settings
+  getSettings: () => api.get("/settings").then((r) => r.data),
+  updateSettings: (data: Record<string, number>) => api.put("/settings", data).then((r) => r.data),
 };

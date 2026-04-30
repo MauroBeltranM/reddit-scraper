@@ -7,18 +7,48 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 
 from backend.app.db.session import SessionLocal, get_db
-from backend.app.models.models import Comment, Post, Snapshot, Subreddit
+from backend.app.models.models import Comment, Post, Setting, Snapshot, Subreddit
 from backend.app.schemas.schemas import (
     CommentRead,
     DashboardStats,
     PostRead,
     ScrapeResult,
+    SettingUpdate,
+    SettingsRead,
     SubredditCreate,
     SubredditRead,
 )
 from backend.app.services.scraper import RedditScraper, ScrapeTask, tasks
 
 router = APIRouter(prefix="/api", tags=["api"])
+
+
+# --- Settings helpers ---
+
+SETTINGS_DEFAULTS = {
+    "max_new_posts": str(__import__("os").getenv("MAX_NEW_POSTS", "10")),
+    "top_comments": str(__import__("os").getenv("TOP_COMMENTS", "50")),
+    "request_delay": str(__import__("os").getenv("REQUEST_DELAY", "1.0")),
+    "max_comment_depth": str(__import__("os").getenv("MAX_COMMENT_DEPTH", "10")),
+}
+
+SETTINGS_TYPES = {
+    "max_new_posts": int,
+    "top_comments": int,
+    "request_delay": float,
+    "max_comment_depth": int,
+}
+
+
+def get_settings_dict(db: Session) -> dict:
+    """Load all settings from DB, falling back to env/defaults."""
+    rows = db.query(Setting).all()
+    db_map = {r.key: r.value for r in rows}
+    result = {}
+    for key, default in SETTINGS_DEFAULTS.items():
+        val = db_map.get(key, default)
+        result[key] = SETTINGS_TYPES[key](val)
+    return result
 
 
 # --- Subreddits ---
@@ -55,9 +85,15 @@ def remove_subreddit(subreddit_id: int, db: Session = Depends(get_db)):
 def _run_scrape_background(task_id: str, subreddit_name: str):
     """Run scrape in a background thread with its own DB session."""
     task = tasks[task_id]
-    scraper = RedditScraper()
     db = SessionLocal()
     try:
+        cfg = get_settings_dict(db)
+        scraper = RedditScraper(
+            max_new_posts=cfg["max_new_posts"],
+            top_comments=cfg["top_comments"],
+            request_delay=cfg["request_delay"],
+            max_comment_depth=cfg["max_comment_depth"],
+        )
         def on_progress(current: int, total: int, post_title: str):
             task.progress = current
             task.total = total
@@ -327,6 +363,29 @@ def dashboard_stats(db: Session = Depends(get_db)):
         total_comments=db.query(Comment).count(),
         total_snapshots=db.query(Snapshot).count(),
     )
+
+
+# --- Settings ---
+
+@router.get("/settings", response_model=SettingsRead)
+def get_settings(db: Session = Depends(get_db)):
+    return get_settings_dict(db)
+
+
+@router.put("/settings", response_model=SettingsRead)
+def update_settings(body: SettingUpdate, db: Session = Depends(get_db)):
+    for key, value in body.model_dump().items():
+        if value is None:
+            continue
+        if key not in SETTINGS_DEFAULTS:
+            continue
+        row = db.query(Setting).filter_by(key=key).first()
+        if row:
+            row.value = str(value)
+        else:
+            db.add(Setting(key=key, value=str(value)))
+    db.commit()
+    return get_settings_dict(db)
 
 
 # --- Scheduler ---
