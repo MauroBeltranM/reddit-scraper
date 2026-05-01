@@ -9,6 +9,7 @@ const subreddits = ref<any[]>([]);
 const loading = ref(true);
 const sort = ref("score");
 const currentSubredditId = ref<number | null>(null);
+const compact = ref(false);
 const page = ref(0);
 const hasMore = ref(true);
 const pageSize = 50;
@@ -89,6 +90,9 @@ watch(currentSubredditId, () => loadPosts(true));
         <option value="new">Newest</option>
         <option value="comments">Most Comments</option>
       </select>
+      <button class="btn-toggle-compact" :class="{ active: compact }" @click="compact = !compact">
+        {{ compact ? '☷ Normal' : '⊟ Compact' }}
+      </button>
       <div class="export-group">
         <span class="export-label">Export:</span>
         <a :href="exportPostsCsv" class="btn-export" download>CSV</a>
@@ -98,20 +102,23 @@ watch(currentSubredditId, () => loadPosts(true));
 
     <div v-if="loading && posts.length === 0" class="loading">Loading...</div>
 
-    <div class="post-list">
+    <div class="post-list" :class="{ compact }">
       <RouterLink
         v-for="post in posts"
         :key="post.id"
         :to="`/posts/${post.id}`"
         class="post-card"
       >
-        <div class="post-score" :style="{ color: typeColor(post.post_type) }">
+        <div v-if="!compact" class="post-score" :style="{ color: typeColor(post.post_type) }">
           {{ post.score >= 1000 ? (post.score / 1000).toFixed(1) + "k" : post.score }}
           <span class="vote">▲</span>
         </div>
         <div class="post-body">
           <h3>{{ post.title }}</h3>
           <div class="post-meta">
+            <span v-if="compact" class="compact-score" :style="{ color: typeColor(post.post_type) }">
+              ▲ {{ post.score >= 1000 ? (post.score / 1000).toFixed(1) + "k" : post.score }}
+            </span>
             <span v-if="post.author" class="author">u/{{ post.author }}</span>
             <span>💬 {{ post.num_comments }}</span>
             <span :style="{ color: typeColor(post.post_type) }">{{ post.post_type }}</span>
@@ -171,6 +178,7 @@ h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
 }
 
 .post-list { display: flex; flex-direction: column; gap: 0.25rem; }
+.post-list.compact { gap: 2px; }
 
 .post-card {
   display: flex;
@@ -183,6 +191,40 @@ h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
   transition: background 0.15s;
 }
 .post-card:hover { background: var(--bg-hover); }
+
+/* Compact mode */
+.btn-toggle-compact {
+  padding: 0.4rem 0.7rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-toggle-compact:hover { background: var(--bg-hover); color: var(--text); }
+.btn-toggle-compact.active { background: var(--bg-hover); color: var(--text); border-color: var(--blue); }
+
+.compact .post-card {
+  padding: 0.35rem 0.6rem;
+  border-radius: 4px;
+}
+.compact .post-body h3 {
+  font-size: 0.82rem;
+  margin-bottom: 0.1rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.compact .post-meta {
+  font-size: 0.7rem;
+  gap: 0.5rem;
+}
+.compact-score {
+  font-weight: 700;
+  font-size: 0.7rem;
+}
 
 .post-score {
   display: flex;
