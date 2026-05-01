@@ -327,6 +327,27 @@ def get_post_snapshots(post_id: int, db: Session = Depends(get_db)):
 
 # --- Comments ---
 
+@router.get("/posts/search")
+def search_posts(
+    q: str = Query(..., min_length=2),
+    subreddit_id: int | None = Query(None),
+    sort: str = Query("score", pattern="^(score|new|comments)$"),
+    limit: int = Query(50, le=200),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Post).options(joinedload(Post.subreddit)).filter(Post.title.ilike(f"%{q}%"))
+    if subreddit_id:
+        query = query.filter(Post.subreddit_id == subreddit_id)
+    if sort == "score":
+        query = query.order_by(Post.score.desc())
+    elif sort == "new":
+        query = query.order_by(Post.scraped_at.desc())
+    elif sort == "comments":
+        query = query.order_by(Post.num_comments.desc())
+    results = query.limit(limit).all()
+    return results
+
+
 @router.get("/comments/search")
 def search_comments(
     q: str = Query(..., min_length=2),

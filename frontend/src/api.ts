@@ -29,6 +29,8 @@ export default {
   getPostSnapshots: (id: number) => api.get(`/posts/${id}/snapshots`).then((r) => r.data),
 
   // Search
+  searchPosts: (q: string, subredditId?: number, sort?: string) =>
+    api.get("/posts/search", { params: { q, subreddit_id: subredditId, sort } }).then((r) => r.data),
   searchComments: (q: string, subredditId?: number) =>
     api.get("/comments/search", { params: { q, subreddit_id: subredditId } }).then((r) => r.data),
 
