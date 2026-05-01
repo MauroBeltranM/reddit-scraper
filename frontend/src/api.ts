@@ -34,6 +34,19 @@ export default {
   searchComments: (q: string, subredditId?: number) =>
     api.get("/comments/search", { params: { q, subreddit_id: subredditId } }).then((r) => r.data),
 
+  // Export
+  exportPostsUrl: (subreddit?: string, format: string = "csv") => {
+    const base = api.defaults.baseURL || "/api";
+    const params = new URLSearchParams();
+    if (subreddit) params.set("subreddit", subreddit);
+    params.set("format", format);
+    return `${base}/export/posts?${params.toString()}`;
+  },
+  exportCommentsUrl: (postId: number, format: string = "csv") => {
+    const base = api.defaults.baseURL || "/api";
+    return `${base}/export/comments?post_id=${postId}&format=${format}`;
+  },
+
   // Stats
   getStats: () => api.get("/stats").then((r) => r.data),
 

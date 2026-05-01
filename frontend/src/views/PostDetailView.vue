@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { useRoute, RouterLink } from "vue-router";
 import api from "../api";
 
@@ -29,6 +29,9 @@ const commentsHasMore = ref(true);
 const commentsLoading = ref(false);
 const totalRoots = ref(0);
 const commentsPageSize = 20;
+
+const exportCommentsCsv = computed(() => api.exportCommentsUrl(Number(route.params.id), "csv"));
+const exportCommentsJson = computed(() => api.exportCommentsUrl(Number(route.params.id), "json"));
 
 function formatBody(text: string) {
   // Basic markdown: links, bold, italic
@@ -114,7 +117,14 @@ onMounted(async () => {
     </div>
 
     <div class="comments-section">
-      <h2>Comments ({{ totalRoots }} threads, {{ comments.length }} loaded)</h2>
+      <div class="comments-header">
+        <h2>Comments ({{ totalRoots }} threads, {{ comments.length }} loaded)</h2>
+        <div class="export-group">
+          <span class="export-label">Export comments:</span>
+          <a :href="exportCommentsCsv" class="btn-export" download>CSV</a>
+          <a :href="exportCommentsJson" class="btn-export" download>JSON</a>
+        </div>
+      </div>
       <CommentTree :comments="comments" :format-body="formatBody" :time-ago="timeAgo" />
       <button
         v-if="commentsHasMore && comments.length > 0"
@@ -258,6 +268,39 @@ export default { components: { CommentTree } };
 .comments-section h2 {
   font-size: 1.1rem;
   margin-bottom: 1rem;
+}
+
+.comments-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.comments-header h2 {
+  margin-bottom: 0;
+}
+.export-group {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.export-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.btn-export {
+  padding: 0.35rem 0.65rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.8rem;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-export:hover {
+  background: var(--bg-hover);
 }
 
 .comment {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import { useRoute, RouterLink } from "vue-router";
 import api from "../api";
 
@@ -23,6 +23,14 @@ onMounted(() => {
 async function loadSubreddits() {
   subreddits.value = await api.getSubreddits();
 }
+
+const currentSubredditName = computed(() => {
+  if (!currentSubredditId.value) return undefined;
+  const sub = subreddits.value.find((s: any) => s.id === currentSubredditId.value);
+  return sub?.name;
+});
+const exportPostsCsv = computed(() => api.exportPostsUrl(currentSubredditName.value, "csv"));
+const exportPostsJson = computed(() => api.exportPostsUrl(currentSubredditName.value, "json"));
 
 async function loadPosts(reset = false) {
   if (reset) { page.value = 0; posts.value = []; }
@@ -81,6 +89,11 @@ watch(currentSubredditId, () => loadPosts(true));
         <option value="new">Newest</option>
         <option value="comments">Most Comments</option>
       </select>
+      <div class="export-group">
+        <span class="export-label">Export:</span>
+        <a :href="exportPostsCsv" class="btn-export" download>CSV</a>
+        <a :href="exportPostsJson" class="btn-export" download>JSON</a>
+      </div>
     </div>
 
     <div v-if="loading && posts.length === 0" class="loading">Loading...</div>
@@ -130,6 +143,31 @@ h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
   border-radius: 6px;
   color: var(--text);
   font-size: 0.85rem;
+}
+
+.export-group {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+.export-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.btn-export {
+  padding: 0.35rem 0.65rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.8rem;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-export:hover {
+  background: var(--bg-hover);
 }
 
 .post-list { display: flex; flex-direction: column; gap: 0.25rem; }
