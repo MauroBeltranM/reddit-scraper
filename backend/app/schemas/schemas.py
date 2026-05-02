@@ -143,3 +143,19 @@ class SettingUpdate(BaseModel):
     top_comments: int | None = None
     request_delay: float | None = None
     max_comment_depth: int | None = None
+
+
+# --- Subreddit Detail Stats ---
+
+class SubredditStats(BaseModel):
+    id: int
+    name: str
+    active: bool
+    total_posts: int
+    total_comments: int
+    last_scraped_at: datetime | None = None
+    created_at: datetime
+    top_post_title: str | None = None
+    top_post_score: int | None = None
+    avg_score: float | None = None
+    avg_comments: float | None = None

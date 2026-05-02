@@ -23,6 +23,7 @@ from backend.app.schemas.schemas import (
     SettingsRead,
     SubredditCreate,
     SubredditRead,
+    SubredditStats,
     TimelineEntry,
     TopPost,
 )
@@ -85,6 +86,47 @@ def remove_subreddit(subreddit_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Subreddit not found")
     db.delete(sub)
     db.commit()
+
+
+@router.get("/subreddits/{subreddit_id}/stats", response_model=SubredditStats)
+def subreddit_stats(subreddit_id: int, db: Session = Depends(get_db)):
+    sub = db.query(Subreddit).get(subreddit_id)
+    if not sub:
+        raise HTTPException(404, "Subreddit not found")
+
+    post_agg = db.query(
+        func.count(Post.id).label("total_posts"),
+        func.avg(Post.score).label("avg_score"),
+        func.avg(Post.num_comments).label("avg_comments"),
+    ).filter(Post.subreddit_id == subreddit_id).first()
+
+    total_comments = (
+        db.query(func.count(Comment.id))
+        .join(Post, Comment.post_id == Post.id)
+        .filter(Post.subreddit_id == subreddit_id)
+        .scalar()
+    )
+
+    top_post = (
+        db.query(Post)
+        .filter(Post.subreddit_id == subreddit_id)
+        .order_by(Post.score.desc())
+        .first()
+    )
+
+    return SubredditStats(
+        id=sub.id,
+        name=sub.name,
+        active=sub.active,
+        total_posts=post_agg.total_posts or 0,
+        total_comments=total_comments or 0,
+        last_scraped_at=sub.last_scraped_at,
+        created_at=sub.created_at,
+        top_post_title=top_post.title if top_post else None,
+        top_post_score=top_post.score if top_post else None,
+        avg_score=round(post_agg.avg_score, 1) if post_agg.avg_score else None,
+        avg_comments=round(post_agg.avg_comments, 1) if post_agg.avg_comments else None,
+    )
 
 
 # --- Scraping ---

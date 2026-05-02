@@ -202,7 +202,7 @@ onUnmounted(closeEventSource);
     <div v-else class="sub-list">
       <div v-for="sub in subreddits" :key="sub.id" class="sub-card">
         <div class="sub-info">
-          <RouterLink :to="{ path: '/posts', query: { subreddit_id: sub.id } }" class="sub-name">
+          <RouterLink :to="`/subreddits/${sub.id}`" class="sub-name">
             r/{{ sub.name }}
           </RouterLink>
           <div class="sub-meta">
