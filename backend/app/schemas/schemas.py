@@ -99,6 +99,36 @@ class DashboardStats(BaseModel):
     total_snapshots: int
 
 
+# --- Chart Data ---
+
+
+class PostsBySubreddit(BaseModel):
+    subreddit_id: int
+    subreddit_name: str
+    post_count: int
+
+
+class TopPost(BaseModel):
+    id: int
+    reddit_id: str
+    title: str
+    score: int
+    num_comments: int
+    subreddit_name: str
+    permalink: str
+
+
+class TimelineEntry(BaseModel):
+    date: str  # YYYY-MM-DD
+    post_count: int
+
+
+class ChartData(BaseModel):
+    posts_by_subreddit: list[PostsBySubreddit]
+    top_posts: list[TopPost]
+    timeline: list[TimelineEntry]
+
+
 # --- Settings ---
 
 class SettingsRead(BaseModel):
