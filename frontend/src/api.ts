@@ -49,6 +49,7 @@ export default {
 
   // Stats
   getStats: () => api.get("/stats").then((r) => r.data),
+  getChartData: () => api.get("/dashboard/chart-data").then((r) => r.data),
   getSubredditStats: (id: number) => api.get(`/subreddits/${id}/stats`).then((r) => r.data),
 
   // Settings
