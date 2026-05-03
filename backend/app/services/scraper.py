@@ -71,11 +71,15 @@ class RedditScraper:
         self,
         db,
         subreddit_name: str,
+        sort: str = "hot",
+        timeframe: str = "all",
         on_progress: Callable[[int, int, str], None] | None = None,
     ) -> ScrapeResult:
         """Full scrape: discover posts via JSON, then fetch comments for each.
 
         Args:
+            sort: Reddit sort — hot, new, top.
+            timeframe: Time window for top sort — hour, day, week, month, year, all.
             on_progress: Optional callback(current, total, post_title) for progress tracking.
         """
         start = time.time()
@@ -88,7 +92,7 @@ class RedditScraper:
             db.flush()
 
         # Discover posts via JSON
-        posts_discovered = self._fetch_posts(subreddit_name)
+        posts_discovered = self._fetch_posts(subreddit_name, sort=sort, timeframe=timeframe)
         posts_new = 0
         comments_total = 0
         new_count = 0
@@ -160,9 +164,16 @@ class RedditScraper:
             duration_sec=round(time.time() - start, 2),
         )
 
-    def _fetch_posts(self, subreddit: str) -> list[dict]:
-        """Fetch posts from JSON endpoint."""
-        url = f"{REDDIT_BASE}/r/{subreddit}/top.json?t=all&limit=100"
+    def _fetch_posts(self, subreddit: str, sort: str = "hot", timeframe: str = "all") -> list[dict]:
+        """Fetch posts from JSON endpoint.
+
+        Args:
+            sort: Reddit sort method (hot, new, top).
+            timeframe: Time filter for 'top' sort (hour, day, week, month, year, all).
+        """
+        url = f"{REDDIT_BASE}/r/{subreddit}/{sort}.json?limit=100"
+        if sort == "top" and timeframe:
+            url += f"&t={timeframe}"
         try:
             resp = self.client.get(url)
             resp.raise_for_status()

@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import api from "../api";
 
 interface Subreddit {
   id: number;
   name: string;
   active: boolean;
+  sort: string;
+  timeframe: string;
   last_scraped_at: string | null;
   total_posts: number;
 }
@@ -24,13 +26,35 @@ interface ProgressData {
   error: string;
 }
 
+const SORT_OPTIONS = [
+  { value: "hot", label: "Hot" },
+  { value: "new", label: "New" },
+  { value: "top", label: "Top" },
+] as const;
+
+const TIMEFRAME_OPTIONS = [
+  { value: "hour", label: "Hour" },
+  { value: "day", label: "Day" },
+  { value: "week", label: "Week" },
+  { value: "month", label: "Month" },
+  { value: "year", label: "Year" },
+  { value: "all", label: "All" },
+] as const;
+
 const subreddits = ref<Subreddit[]>([]);
 const newSub = ref("");
+const newSubSort = ref("hot");
+const newSubTimeframe = ref("all");
 const loading = ref(true);
 const scraping = ref<string | null>(null);
 const scrapingAll = ref(false);
 const lastResult = ref<string | null>(null);
 const progressData = ref<ProgressData | null>(null);
+const editingId = ref<number | null>(null);
+const editSort = ref("hot");
+const editTimeframe = ref("all");
+
+const showTimeframe = computed(() => newSubSort.value === "top");
 
 let eventSource: EventSource | null = null;
 
@@ -42,9 +66,11 @@ async function load() {
 async function add() {
   const name = newSub.value.trim().toLowerCase().replace(/^r\//, "");
   if (!name) return;
+  const sort = newSubSort.value;
+  const timeframe = newSubTimeframe.value;
   newSub.value = "";
   try {
-    await api.addSubreddit(name);
+    await api.addSubreddit(name, sort, timeframe);
     await load();
   } catch (e: any) {
     alert(e.response?.data?.detail || "Error adding subreddit");
@@ -142,6 +168,31 @@ async function scrapeAll() {
   }
 }
 
+function startEdit(sub: Subreddit) {
+  editingId.value = sub.id;
+  editSort.value = sub.sort || "hot";
+  editTimeframe.value = sub.timeframe || "all";
+}
+
+function cancelEdit() {
+  editingId.value = null;
+}
+
+async function saveEdit(id: number) {
+  try {
+    await api.updateSubreddit(id, { sort: editSort.value, timeframe: editTimeframe.value });
+    editingId.value = null;
+    await load();
+  } catch (e: any) {
+    alert(e.response?.data?.detail || "Error updating subreddit");
+  }
+}
+
+function sortLabel(sort: string, timeframe: string) {
+  if (sort === "top") return `Top (${timeframe})`;
+  return sort.charAt(0).toUpperCase() + sort.slice(1);
+}
+
 function formatDate(d: string | null) {
   if (!d) return "Never";
   return new Date(d).toLocaleString();
@@ -162,6 +213,16 @@ onUnmounted(closeEventSource);
         @keyup.enter="add"
         class="input"
       />
+      <select v-model="newSubSort" class="select-sort">
+        <option v-for="opt in SORT_OPTIONS" :key="opt.value" :value="opt.value">
+          {{ opt.label }}
+        </option>
+      </select>
+      <select v-if="showTimeframe" v-model="newSubTimeframe" class="select-sort">
+        <option v-for="opt in TIMEFRAME_OPTIONS" :key="opt.value" :value="opt.value">
+          {{ opt.label }}
+        </option>
+      </select>
       <button @click="add" class="btn btn-accent">Add</button>
       <button @click="scrapeAll" :disabled="scrapingAll" class="btn btn-secondary">
         {{ scrapingAll ? "Scraping..." : "Scrape All" }}
@@ -202,9 +263,34 @@ onUnmounted(closeEventSource);
     <div v-else class="sub-list">
       <div v-for="sub in subreddits" :key="sub.id" class="sub-card">
         <div class="sub-info">
-          <RouterLink :to="`/subreddits/${sub.id}`" class="sub-name">
-            r/{{ sub.name }}
-          </RouterLink>
+          <div class="sub-top-row">
+            <RouterLink :to="`/subreddits/${sub.id}`" class="sub-name">
+              r/{{ sub.name }}
+            </RouterLink>
+            <span
+              v-if="editingId !== sub.id"
+              class="sort-badge"
+              @click="startEdit(sub)"
+              title="Click to change sort/timeframe"
+            >
+              {{ sortLabel(sub.sort, sub.timeframe) }}
+            </span>
+          </div>
+          <!-- Inline edit -->
+          <div v-if="editingId === sub.id" class="edit-row">
+            <select v-model="editSort" class="select-sort select-small">
+              <option v-for="opt in SORT_OPTIONS" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+            <select v-if="editSort === 'top'" v-model="editTimeframe" class="select-sort select-small">
+              <option v-for="opt in TIMEFRAME_OPTIONS" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </option>
+            </select>
+            <button class="btn btn-small btn-accent" @click="saveEdit(sub.id)">Save</button>
+            <button class="btn btn-small" @click="cancelEdit">Cancel</button>
+          </div>
           <div class="sub-meta">
             {{ sub.total_posts }} posts · Last scraped: {{ formatDate(sub.last_scraped_at) }}
           </div>
@@ -324,6 +410,58 @@ h1 { margin-bottom: 1rem; }
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.75rem 1rem;
+}
+
+.sub-top-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sort-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sort-badge:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.edit-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.select-sort {
+  padding: 0.4rem 0.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.select-sort:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.select-small {
+  padding: 0.25rem 0.4rem;
+  font-size: 0.8rem;
 }
 
 .sub-name {

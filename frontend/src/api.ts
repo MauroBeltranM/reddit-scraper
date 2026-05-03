@@ -7,7 +7,10 @@ const api = axios.create({
 export default {
   // Subreddits
   getSubreddits: () => api.get("/subreddits").then((r) => r.data),
-  addSubreddit: (name: string) => api.post("/subreddits", { name }),
+  addSubreddit: (name: string, sort: string = "hot", timeframe: string = "all") =>
+    api.post("/subreddits", { name, sort, timeframe }),
+  updateSubreddit: (id: number, data: { sort?: string; timeframe?: string }) =>
+    api.patch(`/subreddits/${id}`, data).then((r) => r.data),
   removeSubreddit: (id: number) => api.delete(`/subreddits/${id}`),
 
   // Scraping

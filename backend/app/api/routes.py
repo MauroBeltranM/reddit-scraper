@@ -24,6 +24,7 @@ from backend.app.schemas.schemas import (
     SubredditCreate,
     SubredditRead,
     SubredditStats,
+    SubredditUpdate,
     TimelineEntry,
     TopPost,
 )
@@ -72,7 +73,11 @@ def add_subreddit(body: SubredditCreate, db: Session = Depends(get_db)):
     existing = db.query(Subreddit).filter_by(name=body.name.lower()).first()
     if existing:
         raise HTTPException(409, f"Subreddit '{body.name}' already exists")
-    sub = Subreddit(name=body.name.lower())
+    sub = Subreddit(
+        name=body.name.lower(),
+        sort=body.sort,
+        timeframe=body.timeframe,
+    )
     db.add(sub)
     db.commit()
     db.refresh(sub)
@@ -86,6 +91,24 @@ def remove_subreddit(subreddit_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Subreddit not found")
     db.delete(sub)
     db.commit()
+
+
+@router.patch("/subreddits/{subreddit_id}", response_model=SubredditRead)
+def update_subreddit(subreddit_id: int, body: SubredditUpdate, db: Session = Depends(get_db)):
+    sub = db.query(Subreddit).get(subreddit_id)
+    if not sub:
+        raise HTTPException(404, "Subreddit not found")
+    if body.sort is not None:
+        if body.sort not in ("hot", "new", "top"):
+            raise HTTPException(400, "sort must be one of: hot, new, top")
+        sub.sort = body.sort
+    if body.timeframe is not None:
+        if body.timeframe not in ("hour", "day", "week", "month", "year", "all"):
+            raise HTTPException(400, "timeframe must be one of: hour, day, week, month, year, all")
+        sub.timeframe = body.timeframe
+    db.commit()
+    db.refresh(sub)
+    return sub
 
 
 @router.get("/subreddits/{subreddit_id}/stats", response_model=SubredditStats)
@@ -132,7 +155,7 @@ def subreddit_stats(subreddit_id: int, db: Session = Depends(get_db)):
 # --- Scraping ---
 
 
-def _run_scrape_background(task_id: str, subreddit_name: str):
+def _run_scrape_background(task_id: str, subreddit_name: str, sort: str = "hot", timeframe: str = "all"):
     """Run scrape in a background thread with its own DB session."""
     task = tasks[task_id]
     db = SessionLocal()
@@ -150,7 +173,7 @@ def _run_scrape_background(task_id: str, subreddit_name: str):
             task.current_post = post_title
             task.posts_found = total
 
-        result = scraper.scrape_subreddit(db, subreddit_name, on_progress=on_progress)
+        result = scraper.scrape_subreddit(db, subreddit_name, sort=sort, timeframe=timeframe, on_progress=on_progress)
         db.commit()
         task.status = "done"
         task.posts_found = result.posts_found
@@ -181,7 +204,7 @@ async def scrape_subreddit(subreddit_name: str, db: Session = Depends(get_db)):
 
     # Run in background thread (scrape is sync due to time.sleep)
     loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, _run_scrape_background, task_id, subreddit_name.lower())
+    loop.run_in_executor(None, _run_scrape_background, task_id, subreddit_name.lower(), sub.sort, sub.timeframe)
 
     return {"task_id": task_id, "subreddit": subreddit_name.lower(), "status": "started"}
 
@@ -230,7 +253,7 @@ async def scrape_all(db: Session = Depends(get_db)):
         task = ScrapeTask(task_id=task_id, subreddit=sub.name)
         tasks[task_id] = task
         loop = asyncio.get_event_loop()
-        loop.run_in_executor(None, _run_scrape_background, task_id, sub.name)
+        loop.run_in_executor(None, _run_scrape_background, task_id, sub.name, sub.sort, sub.timeframe)
         all_task_ids.append(task_id)
 
     return {"tasks": all_task_ids, "total": len(all_task_ids)}

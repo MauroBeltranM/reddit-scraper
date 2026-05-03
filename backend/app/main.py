@@ -19,6 +19,38 @@ logger = logging.getLogger(__name__)
 STATIC_DIR = Path("/app/static")
 
 
+def _migrate_db(engine):
+    """Add missing columns to existing tables (lightweight SQLite migrations)."""
+    import sqlalchemy
+    with engine.connect() as conn:
+        # Check if 'sort' column exists in subreddits
+        if engine.dialect.name == "sqlite":
+            result = conn.execute(sqlalchemy.text("PRAGMA table_info(subreddits)"))
+            columns = {row[1] for row in result}
+            if "sort" not in columns:
+                conn.execute(sqlalchemy.text("ALTER TABLE subreddits ADD COLUMN sort VARCHAR(20) DEFAULT 'hot'"))
+                conn.commit()
+                logger.info("Migration: added 'sort' column to subreddits")
+            if "timeframe" not in columns:
+                conn.execute(sqlalchemy.text("ALTER TABLE subreddits ADD COLUMN timeframe VARCHAR(20) DEFAULT 'all'"))
+                conn.commit()
+                logger.info("Migration: added 'timeframe' column to subreddits")
+        else:
+            # PostgreSQL: check information_schema
+            result = conn.execute(sqlalchemy.text(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='subreddits'"
+            ))
+            columns = {row[0] for row in result}
+            if "sort" not in columns:
+                conn.execute(sqlalchemy.text("ALTER TABLE subreddits ADD COLUMN sort VARCHAR(20) DEFAULT 'hot'"))
+                conn.commit()
+                logger.info("Migration: added 'sort' column to subreddits")
+            if "timeframe" not in columns:
+                conn.execute(sqlalchemy.text("ALTER TABLE subreddits ADD COLUMN timeframe VARCHAR(20) DEFAULT 'all'"))
+                conn.commit()
+                logger.info("Migration: added 'timeframe' column to subreddits")
+
+
 # Auto-scheduler can be disabled via env var
 AUTO_SCRAPE = os.getenv("AUTO_SCRAPE", "true").lower() in ("true", "1", "yes")
 
@@ -36,6 +68,8 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def startup():
+        # Lightweight migration: add new columns if they don't exist
+        _migrate_db(engine)
         Base.metadata.create_all(bind=engine)
         if AUTO_SCRAPE:
             start_scheduler()

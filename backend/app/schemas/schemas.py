@@ -7,11 +7,19 @@ from pydantic import BaseModel
 
 class SubredditCreate(BaseModel):
     name: str
+    sort: str = "hot"  # hot, new, top
+    timeframe: str = "all"  # hour, day, week, month, year, all
+
+class SubredditUpdate(BaseModel):
+    sort: str | None = None
+    timeframe: str | None = None
 
 class SubredditRead(BaseModel):
     id: int
     name: str
     active: bool
+    sort: str = "hot"
+    timeframe: str = "all"
     last_scraped_at: datetime | None = None
     total_posts: int = 0
     created_at: datetime

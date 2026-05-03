@@ -14,6 +14,8 @@ class Subreddit(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort: Mapped[str] = mapped_column(String(20), default="hot")  # hot, new, top
+    timeframe: Mapped[str] = mapped_column(String(20), default="all")  # hour, day, week, month, year, all
     last_scraped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     total_posts: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
