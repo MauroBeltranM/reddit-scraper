@@ -151,19 +151,39 @@ const CommentTree = defineComponent({
     formatBody: { type: Function, required: true },
     timeAgo: { type: Function, required: true },
   },
-  setup(props) {
-    return { comments: props.comments, formatBody: props.formatBody, timeAgo: props.timeAgo };
+  data() {
+    return {
+      collapsedMap: {} as Record<string, boolean>,
+    };
+  },
+  methods: {
+    toggleCollapse(c: any) {
+      this.collapsedMap = { ...this.collapsedMap, [c.reddit_id]: !this.collapsedMap[c.reddit_id] };
+    },
+    isCollapsed(c: any): boolean {
+      return !!this.collapsedMap[c.reddit_id];
+    },
+    countReplies(c: any): number {
+      if (!c.replies?.length) return 0;
+      let count = c.replies.length;
+      for (const r of c.replies) count += this.countReplies(r);
+      return count;
+    },
   },
   template: `
     <div class="comment-tree">
       <div v-for="c in comments" :key="c.reddit_id" class="comment" :style="{ marginLeft: c.depth * 24 + 'px' }">
-        <div class="comment-header">
+        <div class="comment-header" @click.stop="toggleCollapse(c)" :class="{ clickable: c.replies?.length }">
+          <span class="collapse-indicator" v-if="c.replies?.length">{{ isCollapsed(c) ? '▶' : '▼' }}</span>
           <span class="comment-score">{{ c.score }} ▲</span>
           <span v-if="c.author" class="comment-author">u/{{ c.author }}</span>
           <span v-else class="comment-author deleted">[deleted]</span>
+          <span v-if="c.replies?.length && isCollapsed(c)" class="reply-count">[+{{ countReplies(c) }} replies]</span>
         </div>
-        <div class="comment-body" v-html="formatBody(c.body)"></div>
-        <CommentTree v-if="c.replies?.length" :comments="c.replies" :format-body="formatBody" :time-ago="timeAgo" />
+        <template v-if="!isCollapsed(c)">
+          <div class="comment-body" v-html="formatBody(c.body)"></div>
+          <CommentTree v-if="c.replies?.length" :comments="c.replies" :format-body="formatBody" :time-ago="timeAgo" />
+        </template>
       </div>
     </div>
   `,
@@ -317,6 +337,30 @@ export default { components: { CommentTree } };
   align-items: center;
   gap: 0.5rem;
   margin-bottom: 0.2rem;
+}
+
+.comment-header.clickable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.comment-header.clickable:hover .collapse-indicator {
+  color: var(--accent);
+}
+
+.collapse-indicator {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  transition: color 0.15s;
+  width: 0.8rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.reply-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .comment-score {
