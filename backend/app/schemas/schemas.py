@@ -42,6 +42,8 @@ class PostRead(BaseModel):
     selftext: str | None = None
     post_type: str = "link"
     permalink: str
+    thumbnail_url: str | None = None
+    local_thumbnail: str | None = None
     scraped_at: datetime
     subreddit: SubredditRead | None = None
 

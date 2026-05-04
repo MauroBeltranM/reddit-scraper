@@ -1,8 +1,10 @@
+import logging
 import re
 import time
 import uuid
 from datetime import datetime, timezone
 from html import unescape
+from pathlib import Path
 from typing import Callable
 
 import httpx
@@ -10,6 +12,8 @@ from bs4 import BeautifulSoup
 
 from app.models.models import Comment, Post, Snapshot, Subreddit
 from app.schemas.schemas import ScrapeResult
+
+logger = logging.getLogger(__name__)
 
 REDDIT_BASE = "https://www.reddit.com"
 USER_AGENT = "Mozilla/5.0 (compatible; RedditScraper/0.1)"
@@ -128,11 +132,23 @@ class RedditScraper:
                 selftext=entry.get("selftext"),
                 post_type=entry.get("post_type", "link"),
                 permalink=entry["permalink"],
+                thumbnail_url=entry.get("thumbnail_url"),
             )
             db.add(post)
             db.flush()
             posts_new += 1
             new_count += 1
+
+            # Download thumbnail for image posts
+            if entry.get("post_type") == "image":
+                # Use the post URL as thumbnail source if Reddit's thumbnail is missing/default
+                thumb_url = entry.get("thumbnail_url")
+                if not thumb_url or thumb_url in ("self", "default", "nsfw", ""):
+                    thumb_url = entry.get("url")  # the image URL itself
+                local = self._download_thumbnail(entry["reddit_id"], thumb_url)
+                if local:
+                    post.local_thumbnail = local
+                    db.flush()
 
             # Fetch comments (limit to avoid long scrapes)
             if new_count <= self.max_new_posts:
@@ -212,6 +228,7 @@ class RedditScraper:
                 "selftext": d.get("selftext", ""),
                 "post_type": post_type,
                 "permalink": d.get("permalink", ""),
+                "thumbnail_url": d.get("thumbnail", None),
             })
 
         return posts
@@ -273,6 +290,28 @@ class RedditScraper:
             link_text = a.get_text()
             a.replace_with(f"[{link_text}]({href})")
         return soup.get_text("\n", strip=True)
+
+    @staticmethod
+    def _get_thumbnail_dir() -> Path:
+        """Return the thumbnails directory, creating it if needed."""
+        thumb_dir = Path("/app/data/thumbnails")
+        thumb_dir.mkdir(parents=True, exist_ok=True)
+        return thumb_dir
+
+    def _download_thumbnail(self, reddit_id: str, thumbnail_url: str) -> str | None:
+        """Download a thumbnail image and return the local filename, or None on failure."""
+        if not thumbnail_url or thumbnail_url in ("self", "default", "nsfw", "", None):
+            return None
+        try:
+            resp = self.client.get(thumbnail_url)
+            resp.raise_for_status()
+            filename = f"{reddit_id}.jpg"
+            path = self._get_thumbnail_dir() / filename
+            path.write_bytes(resp.content)
+            return filename
+        except Exception as e:
+            logger.warning(f"Failed to download thumbnail for {reddit_id}: {e}")
+            return None
 
     def close(self):
         self.client.close()

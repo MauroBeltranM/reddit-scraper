@@ -46,6 +46,7 @@ def _make_t3(
     is_video=False,
     post_hint=None,
     permalink="/r/python/comments/abc123/test_post/",
+    thumbnail=None,
 ):
     """Build a single t3 (post) child."""
     return {
@@ -63,6 +64,7 @@ def _make_t3(
             "is_video": is_video,
             "post_hint": post_hint,
             "permalink": permalink,
+            "thumbnail": thumbnail,
         },
     }
 
@@ -229,6 +231,19 @@ class TestFetchPosts:
             posts = scraper._fetch_posts("python")
 
         assert posts[0]["permalink"] == "/r/python/comments/p1/my_post/"
+
+    def test_fetch_posts_includes_thumbnail_url(self):
+        scraper = RedditScraper()
+        mock_resp = _make_posts_json_response([
+            _make_t3(reddit_id="img1", post_hint="image", thumbnail="https://preview.redd.it/abc.jpg"),
+            _make_t3(reddit_id="p2", thumbnail=None),
+        ])
+
+        with patch.object(scraper.client, "get", return_value=mock_resp):
+            posts = scraper._fetch_posts("python")
+
+        assert posts[0]["thumbnail_url"] == "https://preview.redd.it/abc.jpg"
+        assert posts[1]["thumbnail_url"] is None
 
 
 # --- _fetch_comments tests ---

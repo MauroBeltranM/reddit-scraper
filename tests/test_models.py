@@ -169,6 +169,40 @@ class TestPost:
         assert result.url is None
         assert result.selftext is None
 
+    def test_post_thumbnail_fields(self, db):
+        sub = self._make_subreddit(db)
+        post = Post(
+            subreddit_id=sub.id,
+            reddit_id="thumb01",
+            title="Image post",
+            post_type="image",
+            permalink="/r/python/comments/thumb01/",
+            thumbnail_url="https://preview.redd.it/thumb01.jpg",
+            local_thumbnail="thumb01.jpg",
+        )
+        db.add(post)
+        db.commit()
+
+        result = db.query(Post).first()
+        assert result.thumbnail_url == "https://preview.redd.it/thumb01.jpg"
+        assert result.local_thumbnail == "thumb01.jpg"
+        assert result.post_type == "image"
+
+    def test_post_thumbnail_fields_nullable(self, db):
+        sub = self._make_subreddit(db)
+        post = Post(
+            subreddit_id=sub.id,
+            reddit_id="nothumb",
+            title="Link post",
+            permalink="/r/python/comments/nothumb/",
+        )
+        db.add(post)
+        db.commit()
+
+        result = db.query(Post).first()
+        assert result.thumbnail_url is None
+        assert result.local_thumbnail is None
+
 
 # --- Comment ---
 

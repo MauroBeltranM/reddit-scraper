@@ -35,6 +35,18 @@ def _migrate_db(engine):
                 conn.execute(sqlalchemy.text("ALTER TABLE subreddits ADD COLUMN timeframe VARCHAR(20) DEFAULT 'all'"))
                 conn.commit()
                 logger.info("Migration: added 'timeframe' column to subreddits")
+
+            # Migrate posts: add thumbnail_url and local_thumbnail
+            result = conn.execute(sqlalchemy.text("PRAGMA table_info(posts)"))
+            post_columns = {row[1] for row in result}
+            if "thumbnail_url" not in post_columns:
+                conn.execute(sqlalchemy.text("ALTER TABLE posts ADD COLUMN thumbnail_url VARCHAR(2000)"))
+                conn.commit()
+                logger.info("Migration: added 'thumbnail_url' column to posts")
+            if "local_thumbnail" not in post_columns:
+                conn.execute(sqlalchemy.text("ALTER TABLE posts ADD COLUMN local_thumbnail VARCHAR(500)"))
+                conn.commit()
+                logger.info("Migration: added 'local_thumbnail' column to posts")
         else:
             # PostgreSQL: check information_schema
             result = conn.execute(sqlalchemy.text(
@@ -49,6 +61,19 @@ def _migrate_db(engine):
                 conn.execute(sqlalchemy.text("ALTER TABLE subreddits ADD COLUMN timeframe VARCHAR(20) DEFAULT 'all'"))
                 conn.commit()
                 logger.info("Migration: added 'timeframe' column to subreddits")
+
+            result = conn.execute(sqlalchemy.text(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='posts'"
+            ))
+            post_columns = {row[0] for row in result}
+            if "thumbnail_url" not in post_columns:
+                conn.execute(sqlalchemy.text("ALTER TABLE posts ADD COLUMN thumbnail_url VARCHAR(2000)"))
+                conn.commit()
+                logger.info("Migration: added 'thumbnail_url' column to posts")
+            if "local_thumbnail" not in post_columns:
+                conn.execute(sqlalchemy.text("ALTER TABLE posts ADD COLUMN local_thumbnail VARCHAR(500)"))
+                conn.commit()
+                logger.info("Migration: added 'local_thumbnail' column to posts")
 
 
 # Auto-scheduler can be disabled via env var

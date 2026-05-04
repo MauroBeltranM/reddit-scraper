@@ -4,9 +4,10 @@ import io
 import json
 import uuid
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
@@ -29,6 +30,8 @@ from backend.app.schemas.schemas import (
     TopPost,
 )
 from backend.app.services.scraper import RedditScraper, ScrapeTask, tasks
+
+THUMBNAIL_DIR = Path("/app/data/thumbnails")
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -396,6 +399,24 @@ def get_post_comments(
 @router.get("/posts/{post_id}/snapshots")
 def get_post_snapshots(post_id: int, db: Session = Depends(get_db)):
     return db.query(Snapshot).filter_by(post_id=post_id).order_by(Snapshot.recorded_at).all()
+
+
+# --- Thumbnails ---
+
+@router.get("/thumbnails/{reddit_id}")
+def get_thumbnail(reddit_id: str, db: Session = Depends(get_db)):
+    """Serve a locally cached thumbnail image for a post."""
+    post = db.query(Post).filter_by(reddit_id=reddit_id).first()
+    if not post:
+        raise HTTPException(404, "Post not found")
+    if not post.local_thumbnail:
+        raise HTTPException(404, "No thumbnail available for this post")
+
+    thumb_path = THUMBNAIL_DIR / post.local_thumbnail
+    if not thumb_path.exists():
+        raise HTTPException(404, "Thumbnail file not found on disk")
+
+    return FileResponse(thumb_path, media_type="image/jpeg")
 
 
 # --- Comments ---
