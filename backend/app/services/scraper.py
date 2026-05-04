@@ -12,6 +12,7 @@ from bs4 import BeautifulSoup
 
 from app.models.models import Comment, Post, Snapshot, Subreddit
 from app.schemas.schemas import ScrapeResult
+from app.services.reddit_auth import get_reddit_token
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +66,17 @@ class RedditScraper:
         self.top_comments = top_comments
         self.request_delay = request_delay
         self.max_comment_depth = max_comment_depth
+        self._build_client()
+
+    def _build_client(self) -> None:
+        """(Re)build the httpx client with current auth headers."""
+        headers = {"User-Agent": USER_AGENT}
+        token = get_reddit_token()
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+            logger.info("Using Reddit OAuth token for API requests")
         self.client = httpx.Client(
-            headers={"User-Agent": USER_AGENT},
+            headers=headers,
             follow_redirects=True,
             timeout=30.0,
         )
@@ -87,6 +97,9 @@ class RedditScraper:
             on_progress: Optional callback(current, total, post_title) for progress tracking.
         """
         start = time.time()
+
+        # Rebuild client to pick up a fresh OAuth token if configured
+        self._build_client()
 
         # Ensure subreddit exists
         subreddit = db.query(Subreddit).filter_by(name=subreddit_name.lower()).first()
@@ -192,8 +205,13 @@ class RedditScraper:
             url += f"&t={timeframe}"
         try:
             resp = self.client.get(url)
+            if resp.status_code == 401:
+                # Token may have expired — refresh and retry once
+                self._build_client()
+                resp = self.client.get(url)
             resp.raise_for_status()
         except httpx.HTTPError as e:
+            logger.warning(f"Failed to fetch posts from /r/{subreddit}: {e}")
             return []
 
         try:

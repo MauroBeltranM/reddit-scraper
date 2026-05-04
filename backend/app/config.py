@@ -2,9 +2,18 @@ import os
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./reddit.db")
 
+# --- Reddit OAuth (optional — enables authenticated API requests) ---
+REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID", "")
+REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET", "")
+
 
 class Settings:
     database_url: str = DATABASE_URL
+
+    @property
+    def reddit_oauth_enabled(self) -> bool:
+        """True when both client_id and client_secret are configured."""
+        return bool(REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET)
 
     @property
     def is_sqlite(self) -> bool:
