@@ -346,7 +346,7 @@ class TestSetting:
         db.add(s)
         db.commit()
 
-        result = db.query(Setting).get("max_new_posts")
+        result = db.get(Setting, "max_new_posts")
         assert result is not None
         assert result.value == "10"
 
@@ -355,5 +355,5 @@ class TestSetting:
         db.add(s)
         db.commit()
 
-        result = db.query(Setting).get("request_delay")
+        result = db.get(Setting, "request_delay")
         assert result.key == "request_delay"
