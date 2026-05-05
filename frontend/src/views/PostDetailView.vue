@@ -42,6 +42,12 @@ function formatBody(text: string) {
     .replace(/\n/g, "<br>");
 }
 
+function getThumbUrl(post: any): string | undefined {
+  if (post.local_thumbnail) return `/api/thumbnails/${post.reddit_id}`;
+  if (post.thumbnail_url && post.thumbnail_url.startsWith("http")) return post.thumbnail_url;
+  return undefined;
+}
+
 function timeAgo(dateStr: string) {
   const diff = Date.now() - new Date(dateStr).getTime();
   const hours = Math.floor(diff / 3600000);
@@ -84,16 +90,29 @@ onMounted(async () => {
     <RouterLink to="/posts" class="back">← Back to posts</RouterLink>
 
     <div class="post-header">
-      <h1 class="post-title">{{ post.title }}</h1>
-      <div class="post-meta">
-        <span :class="['type-badge', post.post_type]">{{ post.post_type }}</span>
-        <span v-if="post.subreddit" class="sub">r/{{ post.subreddit.name }}</span>
-        <span v-if="post.author" class="author">by u/{{ post.author }}</span>
-        <span> {{ post.score.toLocaleString() }} ▲</span>
-        <span>💬 {{ post.num_comments }}</span>
-        <a :href="'https://reddit.com' + post.permalink" target="_blank" class="reddit-link">
-          Open on Reddit ↗
-        </a>
+      <div class="post-header-top">
+        <img
+          v-if="getThumbUrl(post)"
+          :src="getThumbUrl(post)"
+          alt=""
+          class="post-detail-thumb"
+        />
+        <div v-else-if="post.post_type === 'image' || post.post_type === 'link'" class="post-detail-thumb-placeholder">
+          <span>{{ post.post_type === 'image' ? '🖼' : '🔗' }}</span>
+        </div>
+        <div class="post-header-text">
+          <h1 class="post-title">{{ post.title }}</h1>
+          <div class="post-meta">
+            <span :class="['type-badge', post.post_type]">{{ post.post_type }}</span>
+            <span v-if="post.subreddit" class="sub">r/{{ post.subreddit.name }}</span>
+            <span v-if="post.author" class="author">by u/{{ post.author }}</span>
+            <span> {{ post.score.toLocaleString() }} ▲</span>
+            <span>💬 {{ post.num_comments }}</span>
+            <a :href="'https://reddit.com' + post.permalink" target="_blank" class="reddit-link">
+              Open on Reddit ↗
+            </a>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -203,6 +222,38 @@ export default { components: { CommentTree } };
 .back:hover { color: var(--text); }
 
 .post-header { margin-bottom: 1.5rem; }
+
+.post-header-top {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.post-detail-thumb {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+  background: var(--bg-hover);
+}
+.post-detail-thumb-placeholder {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  flex-shrink: 0;
+  font-size: 1.6rem;
+}
+
+.post-header-text {
+  flex: 1;
+  min-width: 0;
+}
 
 .post-title {
   font-size: 1.3rem;

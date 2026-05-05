@@ -161,6 +161,12 @@ function typeColor(type: string) {
   return colors[type] || "var(--text-muted)";
 }
 
+function getThumbUrl(post: any): string | undefined {
+  if (post.local_thumbnail) return `/api/thumbnails/${post.reddit_id}`;
+  if (post.thumbnail_url && post.thumbnail_url.startsWith("http")) return post.thumbnail_url;
+  return undefined;
+}
+
 const exportCsv = computed(() => stats.value ? api.exportPostsUrl(stats.value.name, "csv") : "#");
 const exportJson = computed(() => stats.value ? api.exportPostsUrl(stats.value.name, "json") : "#");
 
@@ -284,6 +290,16 @@ onUnmounted(closeEventSource);
             <div class="post-score" :style="{ color: typeColor(post.post_type) }">
               {{ post.score >= 1000 ? (post.score / 1000).toFixed(1) + "k" : post.score }}
               <span class="vote">▲</span>
+            </div>
+            <img
+              v-if="getThumbUrl(post)"
+              :src="getThumbUrl(post)"
+              alt=""
+              class="post-thumb"
+              loading="lazy"
+            />
+            <div v-else class="post-thumb-placeholder">
+              <span>{{ post.post_type === 'image' ? '🖼' : post.post_type === 'video' ? '🎬' : '📄' }}</span>
             </div>
             <div class="post-body">
               <h3>{{ post.title }}</h3>
@@ -550,6 +566,27 @@ onUnmounted(closeEventSource);
 .vote { font-size: 0.7rem; color: var(--text-muted); }
 .post-body { flex: 1; min-width: 0; }
 .post-body h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.25rem; }
+
+.post-thumb {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+  background: var(--bg-hover);
+}
+.post-thumb-placeholder {
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  flex-shrink: 0;
+  font-size: 1.2rem;
+}
 .post-meta {
   display: flex;
   gap: 0.75rem;

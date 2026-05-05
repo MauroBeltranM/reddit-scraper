@@ -70,6 +70,12 @@ function typeColor(type: string) {
   return colors[type] || "var(--text-muted)";
 }
 
+function getThumbUrl(post: any): string | undefined {
+  if (post.local_thumbnail) return `/api/thumbnails/${post.reddit_id}`;
+  if (post.thumbnail_url && post.thumbnail_url.startsWith("http")) return post.thumbnail_url;
+  return undefined;
+}
+
 watch(sort, () => loadPosts(true));
 watch(currentSubredditId, () => loadPosts(true));
 </script>
@@ -112,6 +118,17 @@ watch(currentSubredditId, () => loadPosts(true));
         <div v-if="!compact" class="post-score" :style="{ color: typeColor(post.post_type) }">
           {{ post.score >= 1000 ? (post.score / 1000).toFixed(1) + "k" : post.score }}
           <span class="vote">▲</span>
+        </div>
+        <img
+          v-if="getThumbUrl(post)"
+          :src="getThumbUrl(post)"
+          alt=""
+          class="post-thumb"
+          :class="{ compact }"
+          loading="lazy"
+        />
+        <div v-else class="post-thumb-placeholder" :class="{ compact }">
+          <span>{{ post.post_type === 'image' ? '🖼' : post.post_type === 'video' ? '🎬' : '📄' }}</span>
         </div>
         <div class="post-body">
           <h3>{{ post.title }}</h3>
@@ -238,6 +255,38 @@ h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
 
 .post-body { flex: 1; min-width: 0; }
 .post-body h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.25rem; }
+
+.post-thumb {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+  background: var(--bg-hover);
+}
+.post-thumb.compact {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+}
+.post-thumb-placeholder {
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  flex-shrink: 0;
+  font-size: 1.2rem;
+}
+.post-thumb-placeholder.compact {
+  width: 36px;
+  height: 36px;
+  font-size: 0.8rem;
+  border-radius: 4px;
+}
 
 .post-meta {
   display: flex;
