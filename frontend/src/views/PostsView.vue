@@ -8,6 +8,7 @@ const posts = ref<any[]>([]);
 const subreddits = ref<any[]>([]);
 const loading = ref(true);
 const sort = ref("score");
+const since = ref("all");
 const currentSubredditId = ref<number | null>(null);
 const compact = ref(false);
 const page = ref(0);
@@ -41,6 +42,7 @@ async function loadPosts(reset = false) {
     offset: page.value * pageSize,
   };
   if (currentSubredditId.value) params.subreddit_id = currentSubredditId.value;
+  if (since.value && since.value !== "all") params.since = since.value;
 
   const batch = await api.getPosts(params);
   posts.value.push(...batch);
@@ -77,6 +79,7 @@ function getThumbUrl(post: any): string | undefined {
 }
 
 watch(sort, () => loadPosts(true));
+watch(since, () => loadPosts(true));
 watch(currentSubredditId, () => loadPosts(true));
 </script>
 
@@ -85,6 +88,12 @@ watch(currentSubredditId, () => loadPosts(true));
     <h1>Posts</h1>
 
     <div class="filters">
+      <select v-model="since">
+        <option value="all">All time</option>
+        <option value="24h">Last 24h</option>
+        <option value="7d">Last 7 days</option>
+        <option value="30d">Last 30 days</option>
+      </select>
       <select v-model="currentSubredditId">
         <option :value="null">All subreddits</option>
         <option v-for="sub in subreddits" :key="sub.id" :value="sub.id">
