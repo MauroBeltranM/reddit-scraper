@@ -552,6 +552,33 @@ def dashboard_chart_data(db: Session = Depends(get_db)):
     )
 
 
+# --- OAuth Status ---
+
+@router.get("/settings/oauth-status")
+def get_oauth_status():
+    """Return Reddit OAuth connection status."""
+    from backend.app.config import REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, settings as app_settings
+    from backend.app.services.reddit_auth import get_reddit_token, _cached_token, _expires_at
+    import time as _time
+
+    configured = app_settings.reddit_oauth_enabled
+    has_id = bool(REDDIT_CLIENT_ID)
+    has_secret = bool(REDDIT_CLIENT_SECRET)
+
+    # Check if we can get a valid token
+    active = False
+    if configured:
+        token = get_reddit_token()
+        active = token is not None
+
+    return {
+        "enabled": configured,
+        "connected": active,
+        "has_client_id": has_id,
+        "has_client_secret": has_secret,
+    }
+
+
 # --- Settings ---
 
 @router.get("/settings", response_model=SettingsRead)

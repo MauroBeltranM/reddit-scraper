@@ -58,4 +58,7 @@ export default {
   // Settings
   getSettings: () => api.get("/settings").then((r) => r.data),
   updateSettings: (data: Record<string, number>) => api.put("/settings", data).then((r) => r.data),
+
+  // OAuth
+  getOAuthStatus: () => api.get("/settings/oauth-status").then((r) => r.data),
 };
