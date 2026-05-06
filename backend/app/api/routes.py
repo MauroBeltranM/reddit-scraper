@@ -268,6 +268,7 @@ async def scrape_all(db: Session = Depends(get_db)):
 def list_posts(
     subreddit_id: int | None = Query(None),
     sort: str = Query("score", pattern="^(score|new|comments)$"),
+    since: str | None = Query(None, pattern="^(24h|7d|30d|all)$"),
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -276,6 +277,12 @@ def list_posts(
 
     if subreddit_id:
         query = query.filter(Post.subreddit_id == subreddit_id)
+
+    # Apply time-based filter
+    since_deltas = {"24h": timedelta(hours=24), "7d": timedelta(days=7), "30d": timedelta(days=30)}
+    if since and since != "all":
+        cutoff = datetime.utcnow() - since_deltas[since]
+        query = query.filter(Post.scraped_at >= cutoff)
 
     if sort == "score":
         query = query.order_by(Post.score.desc())
