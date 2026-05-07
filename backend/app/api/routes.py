@@ -176,7 +176,7 @@ def _run_scrape_background(task_id: str, subreddit_name: str, sort: str = "hot",
             task.current_post = post_title
             task.posts_found = total
 
-        result = scraper.scrape_subreddit(db, subreddit_name, sort=sort, timeframe=timeframe, on_progress=on_progress)
+        result = scraper.scrape_subreddit(db, subreddit_name, sort=sort, timeframe=timeframe, on_progress=on_progress, task=task)
         db.commit()
         task.status = "done"
         task.posts_found = result.posts_found

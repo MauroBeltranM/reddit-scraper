@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from app.services.scraper import REDDIT_BASE, RedditScraper
+from app.services.scraper import REDDIT_BASE, RedditScraper, ScrapeTask
 
 
 # --- Helpers ---
@@ -418,3 +418,153 @@ class TestScraperInit:
         scraper = RedditScraper()
         assert "RedditScraper" in scraper.client.headers.get("user-agent", "")
         scraper.close()
+
+
+# --- Rate limit retry tests ---
+
+
+class TestRequestWithRetry:
+    def test_returns_response_on_success(self):
+        """Should return the response directly on 200."""
+        scraper = RedditScraper()
+        mock_resp = _make_posts_json_response([_make_t3(reddit_id="p1")])
+
+        with patch.object(scraper.client, "get", return_value=mock_resp):
+            result = scraper._request_with_retry("https://www.reddit.com/r/python/hot.json")
+
+        assert result is not None
+        assert result.status_code == 200
+        scraper.close()
+
+    def test_retries_on_429_and_succeeds(self):
+        """Should retry on 429 and succeed when server recovers."""
+        scraper = RedditScraper()
+        resp_429 = httpx.Response(429, text="rate limited", request=_make_request())
+        resp_200 = _make_posts_json_response([_make_t3(reddit_id="p1")])
+
+        with patch.object(scraper.client, "get", side_effect=[resp_429, resp_200]):
+            with patch("app.services.scraper.time.sleep") as mock_sleep:
+                result = scraper._request_with_retry("https://www.reddit.com/r/python/hot.json")
+
+        assert result is not None
+        assert result.status_code == 200
+        mock_sleep.assert_called_once_with(2.0)  # base delay on first retry
+        scraper.close()
+
+    def test_exponential_backoff(self):
+        """Should double the delay on each retry attempt."""
+        scraper = RedditScraper()
+        resp_429 = httpx.Response(429, text="rate limited", request=_make_request())
+        resp_200 = _make_posts_json_response([])
+
+        # 429, 429, 200 -> delays of 2.0, 4.0
+        with patch.object(scraper.client, "get", side_effect=[resp_429, resp_429, resp_200]):
+            with patch("app.services.scraper.time.sleep") as mock_sleep:
+                result = scraper._request_with_retry("https://www.reddit.com/r/python/hot.json")
+
+        assert result is not None
+        assert mock_sleep.call_count == 2
+        mock_sleep.assert_any_call(2.0)
+        mock_sleep.assert_any_call(4.0)
+        scraper.close()
+
+    def test_returns_none_when_all_retries_exhausted(self):
+        """Should return None after MAX_RETRIES (3) failed attempts."""
+        scraper = RedditScraper()
+        resp_429 = httpx.Response(429, text="rate limited", request=_make_request())
+
+        with patch.object(scraper.client, "get", return_value=resp_429):
+            with patch("app.services.scraper.time.sleep"):
+                result = scraper._request_with_retry("https://www.reddit.com/r/python/hot.json")
+
+        assert result is None
+        scraper.close()
+
+    def test_updates_task_retry_info(self):
+        """Should update ScrapeTask with retry count and status."""
+        scraper = RedditScraper()
+        task = ScrapeTask(task_id="test1", subreddit="python")
+        resp_429 = httpx.Response(429, text="rate limited", request=_make_request())
+        resp_200 = _make_posts_json_response([])
+
+        with patch.object(scraper.client, "get", side_effect=[resp_429, resp_200]):
+            with patch("app.services.scraper.time.sleep"):
+                scraper._request_with_retry("https://www.reddit.com/r/python/hot.json", task=task)
+
+        assert task.retries_total == 1
+        assert "429 retry" in task.last_retry_status
+        scraper.close()
+
+    def test_updates_task_after_exhausted_retries(self):
+        """Should track all retries when exhausted."""
+        scraper = RedditScraper()
+        task = ScrapeTask(task_id="test2", subreddit="python")
+        resp_429 = httpx.Response(429, text="rate limited", request=_make_request())
+
+        with patch.object(scraper.client, "get", return_value=resp_429):
+            with patch("app.services.scraper.time.sleep"):
+                scraper._request_with_retry("https://www.reddit.com/r/python/hot.json", task=task)
+
+        assert task.retries_total == 3
+        scraper.close()
+
+    def test_fetch_posts_returns_empty_on_rate_limit_exhaustion(self):
+        """_fetch_posts should return [] when retries exhausted."""
+        scraper = RedditScraper()
+        resp_429 = httpx.Response(429, text="rate limited", request=_make_request())
+
+        with patch.object(scraper.client, "get", return_value=resp_429):
+            with patch("app.services.scraper.time.sleep"):
+                posts = scraper._fetch_posts("python")
+
+        assert posts == []
+        scraper.close()
+
+    def test_fetch_posts_succeeds_after_429_retry(self):
+        """_fetch_posts should succeed after a 429 retry."""
+        scraper = RedditScraper()
+        resp_429 = httpx.Response(429, text="rate limited", request=_make_request())
+        resp_200 = _make_posts_json_response([_make_t3(reddit_id="p1", title="Recovered")])
+
+        with patch.object(scraper.client, "get", side_effect=[resp_429, resp_200]):
+            with patch("app.services.scraper.time.sleep"):
+                posts = scraper._fetch_posts("python")
+
+        assert len(posts) == 1
+        assert posts[0]["title"] == "Recovered"
+        scraper.close()
+
+    def test_fetch_comments_returns_empty_on_rate_limit_exhaustion(self):
+        """_fetch_comments should return [] when retries exhausted."""
+        scraper = RedditScraper()
+        resp_429 = httpx.Response(429, text="rate limited", request=_make_request())
+
+        with patch.object(scraper.client, "get", return_value=resp_429):
+            with patch("app.services.scraper.time.sleep"):
+                comments = scraper._fetch_comments("/r/python/comments/p1/")
+
+        assert comments == []
+        scraper.close()
+
+
+class TestScrapeTaskRetryFields:
+    def test_initial_retry_state(self):
+        task = ScrapeTask(task_id="t1", subreddit="python")
+        assert task.retries_total == 0
+        assert task.last_retry_status == ""
+
+    def test_to_dict_includes_retry_fields(self):
+        task = ScrapeTask(task_id="t1", subreddit="python")
+        d = task.to_dict()
+        assert "retries_total" in d
+        assert "last_retry_status" in d
+        assert d["retries_total"] == 0
+        assert d["last_retry_status"] == ""
+
+    def test_to_dict_reflects_retry_updates(self):
+        task = ScrapeTask(task_id="t1", subreddit="python")
+        task.retries_total = 2
+        task.last_retry_status = "429 retry 2/3, waiting 4.0s"
+        d = task.to_dict()
+        assert d["retries_total"] == 2
+        assert "429 retry" in d["last_retry_status"]

@@ -21,6 +21,8 @@ USER_AGENT = "Mozilla/5.0 (compatible; RedditScraper/0.1)"
 REQUEST_DELAY = 1.0  # seconds between requests
 MAX_COMMENT_DEPTH = 10
 TOP_COMMENTS = 50
+MAX_RETRIES = 3
+RETRY_BASE_DELAY = 2.0  # seconds, doubles each retry
 
 
 # --- In-memory task progress store ---
@@ -39,6 +41,8 @@ class ScrapeTask:
         self.comments_total: int = 0
         self.duration_sec: float = 0.0
         self.error: str = ""
+        self.retries_total: int = 0
+        self.last_retry_status: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -53,6 +57,8 @@ class ScrapeTask:
             "comments_total": self.comments_total,
             "duration_sec": self.duration_sec,
             "error": self.error,
+            "retries_total": self.retries_total,
+            "last_retry_status": self.last_retry_status,
         }
 
 
@@ -66,6 +72,7 @@ class RedditScraper:
         self.top_comments = top_comments
         self.request_delay = request_delay
         self.max_comment_depth = max_comment_depth
+        self._current_task: ScrapeTask | None = None
         self._build_client()
 
     def _build_client(self) -> None:
@@ -81,6 +88,48 @@ class RedditScraper:
             timeout=30.0,
         )
 
+    def _request_with_retry(
+        self,
+        url: str,
+        task: ScrapeTask | None = None,
+    ) -> httpx.Response | None:
+        """Make a GET request with exponential backoff retry on HTTP 429.
+
+        Args:
+            url: Full URL to request.
+            task: Optional ScrapeTask to update with retry info.
+
+        Returns:
+            httpx.Response on success, or None if all retries exhausted.
+        """
+        for attempt in range(MAX_RETRIES + 1):
+            resp = self.client.get(url)
+
+            # Handle 401 — token may have expired
+            if resp.status_code == 401 and attempt == 0:
+                self._build_client()
+                resp = self.client.get(url)
+
+            if resp.status_code == 429:
+                if attempt < MAX_RETRIES:
+                    delay = RETRY_BASE_DELAY * (2 ** attempt)
+                    logger.warning(
+                        f"Rate limited (429) on {url}, retrying in {delay}s "
+                        f"(attempt {attempt + 1}/{MAX_RETRIES})"
+                    )
+                    if task:
+                        task.retries_total += 1
+                        task.last_retry_status = f"429 retry {attempt + 1}/{MAX_RETRIES}, waiting {delay}s"
+                    time.sleep(delay)
+                    continue
+                else:
+                    logger.error(f"Rate limited (429) exhausted all {MAX_RETRIES} retries for {url}")
+                    return None
+
+            return resp
+
+        return None
+
     def scrape_subreddit(
         self,
         db,
@@ -88,6 +137,7 @@ class RedditScraper:
         sort: str = "hot",
         timeframe: str = "all",
         on_progress: Callable[[int, int, str], None] | None = None,
+        task: ScrapeTask | None = None,
     ) -> ScrapeResult:
         """Full scrape: discover posts via JSON, then fetch comments for each.
 
@@ -95,8 +145,11 @@ class RedditScraper:
             sort: Reddit sort — hot, new, top.
             timeframe: Time window for top sort — hour, day, week, month, year, all.
             on_progress: Optional callback(current, total, post_title) for progress tracking.
+            task: Optional ScrapeTask to track retry info.
         """
         start = time.time()
+
+        self._current_task = task
 
         # Rebuild client to pick up a fresh OAuth token if configured
         self._build_client()
@@ -204,11 +257,10 @@ class RedditScraper:
         if sort == "top" and timeframe:
             url += f"&t={timeframe}"
         try:
-            resp = self.client.get(url)
-            if resp.status_code == 401:
-                # Token may have expired — refresh and retry once
-                self._build_client()
-                resp = self.client.get(url)
+            resp = self._request_with_retry(url, task=self._current_task)
+            if resp is None:
+                logger.warning(f"Failed to fetch posts from /r/{subreddit}: rate limited after retries")
+                return []
             resp.raise_for_status()
         except httpx.HTTPError as e:
             logger.warning(f"Failed to fetch posts from /r/{subreddit}: {e}")
@@ -255,7 +307,9 @@ class RedditScraper:
         """Fetch comments for a post from its JSON endpoint."""
         url = f"{REDDIT_BASE}{permalink}.json"
         try:
-            resp = self.client.get(url)
+            resp = self._request_with_retry(url, task=self._current_task)
+            if resp is None:
+                return []
             resp.raise_for_status()
         except httpx.HTTPError:
             return []
