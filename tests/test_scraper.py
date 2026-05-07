@@ -492,7 +492,8 @@ class TestRequestWithRetry:
                 scraper._request_with_retry("https://www.reddit.com/r/python/hot.json", task=task)
 
         assert task.retries_total == 1
-        assert "429 retry" in task.last_retry_status
+        assert "reintento" in task.last_retry_status
+        assert "429" in task.last_retry_status
         scraper.close()
 
     def test_updates_task_after_exhausted_retries(self):
@@ -564,7 +565,199 @@ class TestScrapeTaskRetryFields:
     def test_to_dict_reflects_retry_updates(self):
         task = ScrapeTask(task_id="t1", subreddit="python")
         task.retries_total = 2
-        task.last_retry_status = "429 retry 2/3, waiting 4.0s"
+        task.last_retry_status = "HTTP 429 reintento 2/3, esperando 4.0s"
         d = task.to_dict()
         assert d["retries_total"] == 2
-        assert "429 retry" in d["last_retry_status"]
+        assert "reintento" in d["last_retry_status"]
+
+
+# --- Error handling tests (403, 429, 500 with Spanish messages) ---
+
+
+class TestErrorHandling:
+    """Tests for improved error handling with user-friendly Spanish messages."""
+
+    def test_403_sets_task_error_immediately(self):
+        """403 should fail immediately without retries and set Spanish error on task."""
+        scraper = RedditScraper()
+        task = ScrapeTask(task_id="t1", subreddit="quarantined_sub")
+        resp_403 = httpx.Response(403, text="Forbidden", request=_make_request())
+
+        with patch.object(scraper.client, "get", return_value=resp_403):
+            result = scraper._request_with_retry(
+                "https://www.reddit.com/r/quarantined_sub/hot.json", task=task
+            )
+
+        assert result is None
+        assert task.error == "Subreddit restringido o en cuarentena. No se puede acceder al contenido."
+        assert task.retries_total == 0  # No retries for 403
+        scraper.close()
+
+    def test_403_fetch_posts_sets_task_error(self):
+        """_fetch_posts should set task.error on 403."""
+        scraper = RedditScraper()
+        task = ScrapeTask(task_id="t1", subreddit="quarantined_sub")
+        scraper._current_task = task
+        resp_403 = httpx.Response(403, text="Forbidden", request=_make_request())
+
+        with patch.object(scraper.client, "get", return_value=resp_403):
+            posts = scraper._fetch_posts("quarantined_sub")
+
+        assert posts == []
+        assert "restringido" in task.error.lower() or "cuarentena" in task.error.lower()
+        scraper.close()
+
+    def test_500_retries_then_sets_task_error(self):
+        """500 should retry with backoff and set Spanish error when exhausted."""
+        scraper = RedditScraper()
+        task = ScrapeTask(task_id="t1", subreddit="python")
+        resp_500 = httpx.Response(500, text="Internal Server Error", request=_make_request())
+
+        with patch.object(scraper.client, "get", return_value=resp_500):
+            with patch("app.services.scraper.time.sleep"):
+                result = scraper._request_with_retry(
+                    "https://www.reddit.com/r/python/hot.json", task=task
+                )
+
+        assert result is None
+        assert task.retries_total == 3  # All 3 retries used
+        assert "Error interno" in task.error
+        scraper.close()
+
+    def test_500_retries_and_succeeds(self):
+        """500 should retry and succeed when server recovers."""
+        scraper = RedditScraper()
+        task = ScrapeTask(task_id="t1", subreddit="python")
+        resp_500 = httpx.Response(500, text="Internal Server Error", request=_make_request())
+        resp_200 = _make_posts_json_response([_make_t3(reddit_id="p1")])
+
+        with patch.object(scraper.client, "get", side_effect=[resp_500, resp_200]):
+            with patch("app.services.scraper.time.sleep"):
+                result = scraper._request_with_retry(
+                    "https://www.reddit.com/r/python/hot.json", task=task
+                )
+
+        assert result is not None
+        assert result.status_code == 200
+        assert task.retries_total == 1
+        assert task.error == ""  # No error since it recovered
+        scraper.close()
+
+    def test_429_exhausted_sets_spanish_error(self):
+        """429 exhausted retries should set Spanish rate limit message on task."""
+        scraper = RedditScraper()
+        task = ScrapeTask(task_id="t1", subreddit="python")
+        resp_429 = httpx.Response(429, text="rate limited", request=_make_request())
+
+        with patch.object(scraper.client, "get", return_value=resp_429):
+            with patch("app.services.scraper.time.sleep"):
+                scraper._request_with_retry(
+                    "https://www.reddit.com/r/python/hot.json", task=task
+                )
+
+        assert "Demasiadas peticiones" in task.error
+        scraper.close()
+
+    def test_fetch_posts_500_sets_task_error_on_exhaustion(self):
+        """_fetch_posts should set task.error when 500 retries exhausted."""
+        scraper = RedditScraper()
+        task = ScrapeTask(task_id="t1", subreddit="python")
+        scraper._current_task = task
+        resp_500 = httpx.Response(500, text="Internal Server Error", request=_make_request())
+
+        with patch.object(scraper.client, "get", return_value=resp_500):
+            with patch("app.services.scraper.time.sleep"):
+                posts = scraper._fetch_posts("python")
+
+        assert posts == []
+        assert "Error interno" in task.error
+        scraper.close()
+
+    def test_fetch_comments_403_sets_task_error(self):
+        """_fetch_comments should set task.error on 403."""
+        scraper = RedditScraper()
+        task = ScrapeTask(task_id="t1", subreddit="python")
+        scraper._current_task = task
+        resp_403 = httpx.Response(403, text="Forbidden", request=_make_request())
+
+        with patch.object(scraper.client, "get", return_value=resp_403):
+            comments = scraper._fetch_comments("/r/python/comments/p1/")
+
+        assert comments == []
+        assert "restringido" in task.error.lower() or "cuarentena" in task.error.lower()
+        scraper.close()
+
+    def test_task_to_dict_includes_error(self):
+        """ScrapeTask.to_dict() should include the error field."""
+        task = ScrapeTask(task_id="t1", subreddit="python")
+        task.error = "Subreddit restringido o en cuarentena. No se puede acceder al contenido."
+        d = task.to_dict()
+        assert d["error"] == task.error
+
+    def test_no_task_no_crash_on_403(self):
+        """_request_with_retry should not crash if no task is provided on 403."""
+        scraper = RedditScraper()
+        resp_403 = httpx.Response(403, text="Forbidden", request=_make_request())
+
+        with patch.object(scraper.client, "get", return_value=resp_403):
+            result = scraper._request_with_retry("https://www.reddit.com/r/test/hot.json")
+
+        assert result is None
+        scraper.close()
+
+    def test_502_retries_and_sets_error(self):
+        """502 should retry with backoff and set Spanish error when exhausted."""
+        scraper = RedditScraper()
+        task = ScrapeTask(task_id="t1", subreddit="python")
+        resp_502 = httpx.Response(502, text="Bad Gateway", request=_make_request())
+
+        with patch.object(scraper.client, "get", return_value=resp_502):
+            with patch("app.services.scraper.time.sleep"):
+                scraper._request_with_retry(
+                    "https://www.reddit.com/r/python/hot.json", task=task
+                )
+
+        assert task.retries_total == 3
+        assert "no disponible" in task.error.lower() or "bad gateway" in task.error.lower()
+        scraper.close()
+
+    def test_403_does_not_retry(self):
+        """403 should only call client.get once (no retries)."""
+        scraper = RedditScraper()
+        resp_403 = httpx.Response(403, text="Forbidden", request=_make_request())
+
+        call_count = 0
+
+        def counting_get(url):
+            nonlocal call_count
+            call_count += 1
+            return resp_403
+
+        with patch.object(scraper.client, "get", side_effect=counting_get):
+            scraper._request_with_retry("https://www.reddit.com/r/test/hot.json")
+
+        assert call_count == 1
+        scraper.close()
+
+    def test_error_not_overwritten_by_later_success(self):
+        """If error was set during fetch_posts, later successful fetch_comments shouldn't clear it."""
+        scraper = RedditScraper()
+        task = ScrapeTask(task_id="t1", subreddit="python")
+        scraper._current_task = task
+
+        # First call: 403 on posts
+        resp_403 = httpx.Response(403, text="Forbidden", request=_make_request())
+        with patch.object(scraper.client, "get", return_value=resp_403):
+            scraper._fetch_posts("python")
+
+        assert "restringido" in task.error.lower()
+
+        # Second call: 200 on comments — error should NOT be cleared
+        post_t3 = _make_t3(reddit_id="p1")
+        resp_200 = _make_comments_json_response(post_t3, [])
+        with patch.object(scraper.client, "get", return_value=resp_200):
+            scraper._fetch_comments("/r/python/comments/p1/")
+
+        # Error from posts should still be there
+        assert "restringido" in task.error.lower()
+        scraper.close()

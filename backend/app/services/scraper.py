@@ -24,6 +24,24 @@ TOP_COMMENTS = 50
 MAX_RETRIES = 3
 RETRY_BASE_DELAY = 2.0  # seconds, doubles each retry
 
+# --- User-friendly error messages in Spanish ---
+
+REDDIT_ERROR_MESSAGES: dict[int, str] = {
+    403: "Subreddit restringido o en cuarentena. No se puede acceder al contenido.",
+    429: "Demasiadas peticiones a Reddit. Se ha alcanzado el límite de velocidad.",
+    500: "Error interno del servidor de Reddit. Inténtalo de nuevo más tarde.",
+    502: "Reddit no está disponible temporalmente (bad gateway).",
+    503: "Reddit está en mantenimiento. Inténtalo de nuevo más tarde.",
+}
+
+
+def get_reddit_error_message(status_code: int) -> str:
+    """Return a user-friendly Spanish error message for a Reddit API status code."""
+    return REDDIT_ERROR_MESSAGES.get(
+        status_code,
+        f"Error de Reddit (HTTP {status_code}). No se pudo completar la solicitud.",
+    )
+
 
 # --- In-memory task progress store ---
 
@@ -88,19 +106,30 @@ class RedditScraper:
             timeout=30.0,
         )
 
+    # Status codes that should NOT be retried — immediate failure
+    _NO_RETRY_STATUS_CODES = {403}
+
+    # Status codes eligible for retry with backoff
+    _RETRY_STATUS_CODES = {429, 500, 502, 503}
+
     def _request_with_retry(
         self,
         url: str,
         task: ScrapeTask | None = None,
     ) -> httpx.Response | None:
-        """Make a GET request with exponential backoff retry on HTTP 429.
+        """Make a GET request with exponential backoff retry on transient errors.
+
+        Handles:
+        - 401: Token refresh (once)
+        - 403: Immediate failure (forbidden/quarantined)
+        - 429/500/502/503: Retry with exponential backoff
 
         Args:
             url: Full URL to request.
-            task: Optional ScrapeTask to update with retry info.
+            task: Optional ScrapeTask to update with retry/error info.
 
         Returns:
-            httpx.Response on success, or None if all retries exhausted.
+            httpx.Response on success, or None if all retries exhausted or non-retryable error.
         """
         for attempt in range(MAX_RETRIES + 1):
             resp = self.client.get(url)
@@ -110,20 +139,37 @@ class RedditScraper:
                 self._build_client()
                 resp = self.client.get(url)
 
-            if resp.status_code == 429:
+            # Non-retryable errors — fail immediately with user-friendly message
+            if resp.status_code in self._NO_RETRY_STATUS_CODES:
+                msg = get_reddit_error_message(resp.status_code)
+                logger.warning(f"HTTP {resp.status_code} for {url}: {msg}")
+                if task:
+                    task.error = msg
+                return None
+
+            # Retryable errors — backoff and retry
+            if resp.status_code in self._RETRY_STATUS_CODES:
                 if attempt < MAX_RETRIES:
                     delay = RETRY_BASE_DELAY * (2 ** attempt)
                     logger.warning(
-                        f"Rate limited (429) on {url}, retrying in {delay}s "
+                        f"HTTP {resp.status_code} for {url}, retrying in {delay}s "
                         f"(attempt {attempt + 1}/{MAX_RETRIES})"
                     )
                     if task:
                         task.retries_total += 1
-                        task.last_retry_status = f"429 retry {attempt + 1}/{MAX_RETRIES}, waiting {delay}s"
+                        task.last_retry_status = (
+                            f"HTTP {resp.status_code} reintento {attempt + 1}/{MAX_RETRIES}, "
+                            f"esperando {delay}s"
+                        )
                     time.sleep(delay)
                     continue
                 else:
-                    logger.error(f"Rate limited (429) exhausted all {MAX_RETRIES} retries for {url}")
+                    msg = get_reddit_error_message(resp.status_code)
+                    logger.error(
+                        f"HTTP {resp.status_code} exhausted all {MAX_RETRIES} retries for {url}"
+                    )
+                    if task:
+                        task.error = msg
                     return None
 
             return resp
@@ -259,7 +305,14 @@ class RedditScraper:
         try:
             resp = self._request_with_retry(url, task=self._current_task)
             if resp is None:
-                logger.warning(f"Failed to fetch posts from /r/{subreddit}: rate limited after retries")
+                # Error already set on task by _request_with_retry if task exists
+                logger.warning(f"Failed to fetch posts from /r/{subreddit}")
+                return []
+            if resp.status_code >= 400:
+                msg = get_reddit_error_message(resp.status_code)
+                logger.warning(f"HTTP {resp.status_code} fetching posts from /r/{subreddit}: {msg}")
+                if self._current_task and not self._current_task.error:
+                    self._current_task.error = msg
                 return []
             resp.raise_for_status()
         except httpx.HTTPError as e:
@@ -309,6 +362,13 @@ class RedditScraper:
         try:
             resp = self._request_with_retry(url, task=self._current_task)
             if resp is None:
+                # Error already set on task by _request_with_retry if task exists
+                return []
+            if resp.status_code >= 400:
+                msg = get_reddit_error_message(resp.status_code)
+                logger.warning(f"HTTP {resp.status_code} fetching comments for {permalink}: {msg}")
+                if self._current_task and not self._current_task.error:
+                    self._current_task.error = msg
                 return []
             resp.raise_for_status()
         except httpx.HTTPError:
