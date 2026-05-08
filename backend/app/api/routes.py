@@ -267,6 +267,9 @@ async def scrape_all(db: Session = Depends(get_db)):
 @router.get("/posts", response_model=list[PostRead])
 def list_posts(
     subreddit_id: int | None = Query(None),
+    subreddit: str | None = Query(None, description="Filter by subreddit name (case-insensitive)"),
+    min_score: int | None = Query(None, description="Minimum post score (inclusive)"),
+    max_score: int | None = Query(None, description="Maximum post score (inclusive)"),
     sort: str = Query("score", pattern="^(score|new|comments)$"),
     since: str | None = Query(None, pattern="^(24h|7d|30d|all)$"),
     limit: int = Query(50, le=200),
@@ -277,6 +280,18 @@ def list_posts(
 
     if subreddit_id:
         query = query.filter(Post.subreddit_id == subreddit_id)
+
+    if subreddit:
+        sub = db.query(Subreddit).filter(Subreddit.name == subreddit.lower()).first()
+        if not sub:
+            raise HTTPException(404, f"Subreddit '{subreddit}' not found")
+        query = query.filter(Post.subreddit_id == sub.id)
+
+    if min_score is not None:
+        query = query.filter(Post.score >= min_score)
+
+    if max_score is not None:
+        query = query.filter(Post.score <= max_score)
 
     # Apply time-based filter
     since_deltas = {"24h": timedelta(hours=24), "7d": timedelta(days=7), "30d": timedelta(days=30)}
