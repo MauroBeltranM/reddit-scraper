@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, nextTick } from "vue";
 import { useRoute, RouterLink } from "vue-router";
+import { Chart, registerables } from "chart.js";
 import api from "../api";
+
+Chart.register(...registerables);
 
 interface Comment {
   id: number;
@@ -24,6 +27,8 @@ const post = ref<any>(null);
 const comments = ref<Comment[]>([]);
 const snapshots = ref<Snapshot[]>([]);
 const loading = ref(true);
+const scoreChart = ref<Chart | null>(null);
+const scoreChartCanvas = ref<HTMLCanvasElement | null>(null);
 const commentsPage = ref(0);
 const commentsHasMore = ref(true);
 const commentsLoading = ref(false);
@@ -42,6 +47,102 @@ function formatBody(text: string) {
     .replace(/\n/g, "<br>");
 }
 
+function buildScoreChart() {
+  if (!scoreChartCanvas.value || snapshots.value.length < 2) return;
+  if (scoreChart.value) {
+    scoreChart.value.destroy();
+    scoreChart.value = null;
+  }
+
+  const labels = snapshots.value.map((s) =>
+    new Date(s.recorded_at).toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  );
+  const scores = snapshots.value.map((s) => s.score);
+  const comments = snapshots.value.map((s) => s.num_comments);
+
+  const cssStyle = getComputedStyle(document.documentElement);
+  const accent = cssStyle.getPropertyValue("--accent").trim() || "#ff4500";
+  const blue = cssStyle.getPropertyValue("--blue").trim() || "#58a6ff";
+  const muted = cssStyle.getPropertyValue("--text-muted").trim() || "#8b949e";
+  const borderColor = cssStyle.getPropertyValue("--border").trim() || "#30363d";
+
+  scoreChart.value = new Chart(scoreChartCanvas.value, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Score",
+          data: scores,
+          borderColor: accent,
+          backgroundColor: accent + "20",
+          fill: true,
+          tension: 0.3,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          borderWidth: 2,
+        },
+        {
+          label: "Comments",
+          data: comments,
+          borderColor: blue,
+          backgroundColor: "transparent",
+          fill: false,
+          tension: 0.3,
+          pointRadius: 2,
+          pointHoverRadius: 5,
+          borderWidth: 1.5,
+          borderDash: [4, 4],
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false,
+      },
+      plugins: {
+        legend: {
+          display: true,
+          labels: {
+            color: muted,
+            font: { size: 11 },
+            boxWidth: 12,
+            padding: 12,
+          },
+        },
+        tooltip: {
+          backgroundColor: "#161b22",
+          titleColor: "#e6edf3",
+          bodyColor: "#e6edf3",
+          borderColor,
+          borderWidth: 1,
+          padding: 10,
+          cornerRadius: 6,
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: muted, font: { size: 10 }, maxRotation: 45, maxTicksLimit: 10 },
+          grid: { color: borderColor },
+        },
+        y: {
+          ticks: { color: muted, font: { size: 10 } },
+          grid: { color: borderColor },
+          beginAtZero: false,
+        },
+      },
+    },
+  });
+}
+
 function getThumbUrl(post: any): string | undefined {
   if (post.local_thumbnail) return `/api/thumbnails/${post.reddit_id}`;
   if (post.thumbnail_url && post.thumbnail_url.startsWith("http")) return post.thumbnail_url;
@@ -54,10 +155,6 @@ function timeAgo(dateStr: string) {
   if (hours < 1) return "just now";
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
-}
-
-function formatSnapDate(d: string) {
-  return new Date(d).toLocaleString();
 }
 
 async function loadMoreComments() {
@@ -80,6 +177,9 @@ onMounted(async () => {
   post.value = postData;
   snapshots.value = snapData;
   loading.value = false;
+  // Build score chart after DOM updates
+  await nextTick();
+  buildScoreChart();
   // Load first batch of comments
   await loadMoreComments();
 });
@@ -119,15 +219,9 @@ onMounted(async () => {
     <div v-if="post.selftext" class="selftext" v-html="formatBody(post.selftext)"></div>
 
     <div class="snapshots" v-if="snapshots.length > 1">
-      <h3>📊 Score History</h3>
-      <div class="snap-chart">
-        <div
-          v-for="(snap, i) in snapshots"
-          :key="i"
-          class="snap-bar"
-          :style="{ height: (snap.score / Math.max(...snapshots.map(s => s.score)) * 100) + '%' }"
-          :title="`${snap.score} points · ${snap.num_comments} comments · ${formatSnapDate(snap.recorded_at)}`"
-        />
+      <h3>📊 Score & Comments Over Time</h3>
+      <div class="chart-container">
+        <canvas ref="scoreChartCanvas"></canvas>
       </div>
       <div class="snap-legend">
         {{ snapshots.length }} snapshots ·
@@ -311,23 +405,13 @@ export default { components: { CommentTree } };
   color: var(--text-muted);
 }
 
-.snap-chart {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 60px;
+.chart-container {
+  position: relative;
+  height: 200px;
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0.5rem;
-}
-
-.snap-bar {
-  flex: 1;
-  background: var(--accent);
-  border-radius: 2px 2px 0 0;
-  min-height: 2px;
-  transition: height 0.3s;
+  border-radius: 6px;
+  padding: 0.75rem;
 }
 
 .snap-legend {
