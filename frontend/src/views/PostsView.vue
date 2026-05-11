@@ -10,6 +10,8 @@ const loading = ref(true);
 const sort = ref("score");
 const since = ref("all");
 const currentSubredditId = ref<number | null>(null);
+const minScore = ref<number | null>(null);
+const maxScore = ref<number | null>(null);
 const compact = ref(false);
 const page = ref(0);
 const hasMore = ref(true);
@@ -43,6 +45,8 @@ async function loadPosts(reset = false) {
   };
   if (currentSubredditId.value) params.subreddit_id = currentSubredditId.value;
   if (since.value && since.value !== "all") params.since = since.value;
+  if (minScore.value !== null) params.min_score = minScore.value;
+  if (maxScore.value !== null) params.max_score = maxScore.value;
 
   const batch = await api.getPosts(params);
   posts.value.push(...batch);
@@ -78,6 +82,27 @@ function getThumbUrl(post: any): string | undefined {
   return undefined;
 }
 
+const activeFilterCount = computed(() => {
+  let n = 0;
+  if (currentSubredditId.value !== null) n++;
+  if (minScore.value !== null) n++;
+  if (maxScore.value !== null) n++;
+  if (since.value !== "all") n++;
+  return n;
+});
+
+function resetFilters() {
+  since.value = "all";
+  currentSubredditId.value = null;
+  minScore.value = null;
+  maxScore.value = null;
+  sort.value = "score";
+}
+
+function applyScoreFilters() {
+  loadPosts(true);
+}
+
 watch(sort, () => loadPosts(true));
 watch(since, () => loadPosts(true));
 watch(currentSubredditId, () => loadPosts(true));
@@ -105,8 +130,33 @@ watch(currentSubredditId, () => loadPosts(true));
         <option value="new">Newest</option>
         <option value="comments">Most Comments</option>
       </select>
+      <div class="score-filter">
+        <input
+          type="number"
+          v-model.number="minScore"
+          placeholder="Min score"
+          class="score-input"
+          @change="applyScoreFilters"
+        />
+        <span class="score-sep">–</span>
+        <input
+          type="number"
+          v-model.number="maxScore"
+          placeholder="Max score"
+          class="score-input"
+          @change="applyScoreFilters"
+        />
+      </div>
       <button class="btn-toggle-compact" :class="{ active: compact }" @click="compact = !compact">
         {{ compact ? '☷ Normal' : '⊟ Compact' }}
+      </button>
+      <button
+        v-if="activeFilterCount > 0"
+        class="btn-reset"
+        @click="resetFilters"
+        title="Reset all filters"
+      >
+        ✕ Reset ({{ activeFilterCount }})
       </button>
       <div class="export-group">
         <span class="export-label">Export:</span>
@@ -176,6 +226,45 @@ h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
   border-radius: 6px;
   color: var(--text);
   font-size: 0.85rem;
+}
+
+.score-filter {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.score-input {
+  width: 5rem;
+  padding: 0.5rem 0.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+.score-input::placeholder {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+.score-sep {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.btn-reset {
+  padding: 0.4rem 0.7rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-reset:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: #f85149;
 }
 
 .export-group {
