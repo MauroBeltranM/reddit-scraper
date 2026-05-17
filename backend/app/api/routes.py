@@ -22,6 +22,7 @@ from backend.app.schemas.schemas import (
     ScrapeResult,
     SettingUpdate,
     SettingsRead,
+    SnapshotRead,
     SubredditCreate,
     SubredditRead,
     SubredditStats,
@@ -418,7 +419,7 @@ def get_post_comments(
     }
 
 
-@router.get("/posts/{post_id}/snapshots")
+@router.get("/posts/{post_id}/snapshots", response_model=list[SnapshotRead])
 def get_post_snapshots(post_id: int, db: Session = Depends(get_db)):
     return db.query(Snapshot).filter_by(post_id=post_id).order_by(Snapshot.recorded_at).all()
 
