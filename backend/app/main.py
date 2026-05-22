@@ -8,7 +8,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from backend.app.api.routes import router
+from backend.app.api.routers import (
+    dashboard_router,
+    exports_router,
+    posts_router,
+    scrapes_router,
+    settings_router,
+    subreddits_router,
+)
 from backend.app.db.session import engine
 from backend.app.models.models import Base
 from backend.app.services.scheduler import start_scheduler, stop_scheduler
@@ -105,7 +112,12 @@ def create_app() -> FastAPI:
         stop_scheduler()
 
     # API routes first (registered before static fallback)
-    app.include_router(router)
+    app.include_router(subreddits_router)
+    app.include_router(scrapes_router)
+    app.include_router(posts_router)
+    app.include_router(dashboard_router)
+    app.include_router(settings_router)
+    app.include_router(exports_router)
 
     # Static assets (exact files)
     if STATIC_DIR.exists():
