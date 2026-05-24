@@ -22,7 +22,7 @@ def _scrape_subreddit_sync(subreddit_name: str):
     """Scrape a single subreddit synchronously (runs in thread executor)."""
     db = SessionLocal()
     try:
-        from backend.app.api.routes import get_settings_dict
+        from backend.app.api.routers.settings import get_settings_dict
         cfg = get_settings_dict(db)
         scraper = RedditScraper(
             max_new_posts=cfg["max_new_posts"],
