@@ -202,6 +202,11 @@ onMounted(async () => {
         </div>
         <div class="post-header-text">
           <h1 class="post-title">{{ post.title }}</h1>
+          <span
+            v-if="post.link_flair_text"
+            class="flair-badge"
+            :style="{ backgroundColor: post.link_flair_background_color || '#555' }"
+          >{{ post.link_flair_text }}</span>
           <div class="post-meta">
             <span :class="['type-badge', post.post_type]">{{ post.post_type }}</span>
             <span v-if="post.subreddit" class="sub">r/{{ post.subreddit.name }}</span>
@@ -352,6 +357,19 @@ export default { components: { CommentTree } };
 .post-title {
   font-size: 1.3rem;
   line-height: 1.4;
+  margin-bottom: 0.5rem;
+}
+
+.flair-badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  line-height: 1.4;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
   margin-bottom: 0.5rem;
 }
 

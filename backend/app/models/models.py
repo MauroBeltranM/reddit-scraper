@@ -40,6 +40,8 @@ class Post(Base):
     selftext: Mapped[str | None] = mapped_column(Text, nullable=True)
     post_type: Mapped[str] = mapped_column(String(20), default="link")  # link, self, image, video
     permalink: Mapped[str] = mapped_column(String(500), nullable=False)
+    link_flair_text: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    link_flair_background_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
     thumbnail_url: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     local_thumbnail: Mapped[str | None] = mapped_column(String(500), nullable=True)
     scraped_at: Mapped[datetime] = mapped_column(

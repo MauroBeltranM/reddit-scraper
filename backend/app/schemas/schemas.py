@@ -42,6 +42,8 @@ class PostRead(BaseModel):
     selftext: str | None = None
     post_type: str = "link"
     permalink: str
+    link_flair_text: str | None = None
+    link_flair_background_color: str | None = None
     thumbnail_url: str | None = None
     local_thumbnail: str | None = None
     scraped_at: datetime

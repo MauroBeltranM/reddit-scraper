@@ -190,7 +190,14 @@ watch(currentSubredditId, () => loadPosts(true));
           <span>{{ post.post_type === 'image' ? '🖼' : post.post_type === 'video' ? '🎬' : '📄' }}</span>
         </div>
         <div class="post-body">
-          <h3>{{ post.title }}</h3>
+          <div class="post-title-row">
+            <h3>{{ post.title }}</h3>
+            <span
+              v-if="post.link_flair_text"
+              class="flair-badge"
+              :style="{ backgroundColor: post.link_flair_background_color || '#555' }"
+            >{{ post.link_flair_text }}</span>
+          </div>
           <div class="post-meta">
             <span v-if="compact" class="compact-score" :style="{ color: typeColor(post.post_type) }">
               ▲ {{ post.score >= 1000 ? (post.score / 1000).toFixed(1) + "k" : post.score }}
@@ -325,7 +332,7 @@ h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
   padding: 0.35rem 0.6rem;
   border-radius: 4px;
 }
-.compact .post-body h3 {
+.compact .post-title-row h3 {
   font-size: 0.82rem;
   margin-bottom: 0.1rem;
   white-space: nowrap;
@@ -353,6 +360,30 @@ h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
 
 .post-body { flex: 1; min-width: 0; }
 .post-body h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.25rem; }
+
+.post-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.post-title-row h3 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.flair-badge {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 10px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  line-height: 1.4;
+  flex-shrink: 0;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
 
 .post-thumb {
   width: 60px;

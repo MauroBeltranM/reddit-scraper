@@ -245,6 +245,8 @@ class RedditScraper:
                 post_type=entry.get("post_type", "link"),
                 permalink=entry["permalink"],
                 thumbnail_url=entry.get("thumbnail_url"),
+                link_flair_text=entry.get("link_flair_text"),
+                link_flair_background_color=entry.get("link_flair_background_color"),
             )
             db.add(post)
             db.flush()
@@ -352,6 +354,8 @@ class RedditScraper:
                 "post_type": post_type,
                 "permalink": d.get("permalink", ""),
                 "thumbnail_url": d.get("thumbnail", None),
+                "link_flair_text": d.get("link_flair_text") or None,
+                "link_flair_background_color": d.get("link_flair_background_color") or None,
             })
 
         return posts
