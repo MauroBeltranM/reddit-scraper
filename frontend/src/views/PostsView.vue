@@ -7,7 +7,8 @@ const route = useRoute();
 const posts = ref<any[]>([]);
 const subreddits = ref<any[]>([]);
 const loading = ref(true);
-const sort = ref("score");
+const sortBy = ref("score");
+const order = ref("desc");
 const since = ref("all");
 const currentSubredditId = ref<number | null>(null);
 const minScore = ref<number | null>(null);
@@ -39,7 +40,8 @@ const exportPostsJson = computed(() => api.exportPostsUrl(currentSubredditName.v
 async function loadPosts(reset = false) {
   if (reset) { page.value = 0; posts.value = []; }
   const params: Record<string, string | number> = {
-    sort: sort.value,
+    sort_by: sortBy.value,
+    order: order.value,
     limit: pageSize,
     offset: page.value * pageSize,
   };
@@ -96,14 +98,16 @@ function resetFilters() {
   currentSubredditId.value = null;
   minScore.value = null;
   maxScore.value = null;
-  sort.value = "score";
+  sortBy.value = "score";
+  order.value = "desc";
 }
 
 function applyScoreFilters() {
   loadPosts(true);
 }
 
-watch(sort, () => loadPosts(true));
+watch(sortBy, () => loadPosts(true));
+watch(order, () => loadPosts(true));
 watch(since, () => loadPosts(true));
 watch(currentSubredditId, () => loadPosts(true));
 </script>
@@ -125,11 +129,14 @@ watch(currentSubredditId, () => loadPosts(true));
           /r/{{ sub.name }}
         </option>
       </select>
-      <select v-model="sort">
-        <option value="score">Top by Score</option>
-        <option value="new">Newest</option>
-        <option value="comments">Most Comments</option>
+      <select v-model="sortBy">
+        <option value="score">Score</option>
+        <option value="date">Date</option>
+        <option value="comments">Comments</option>
       </select>
+      <button class="btn-order" :class="{ asc: order === 'asc' }" @click="order = order === 'desc' ? 'asc' : 'desc'" :title="order === 'desc' ? 'Descending' : 'Ascending'">
+        {{ order === 'desc' ? '↓ Desc' : '↑ Asc' }}
+      </button>
       <div class="score-filter">
         <input
           type="number"
@@ -257,6 +264,19 @@ h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
   color: var(--text-muted);
   font-size: 0.8rem;
 }
+
+.btn-order {
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-order:hover { background: var(--bg-hover); color: var(--text); }
+.btn-order.asc { border-color: var(--blue); color: var(--text); }
 
 .btn-reset {
   padding: 0.4rem 0.7rem;

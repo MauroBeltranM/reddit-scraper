@@ -36,7 +36,8 @@ const stats = ref<SubredditStats | null>(null);
 const posts = ref<any[]>([]);
 const loadingStats = ref(true);
 const loadingPosts = ref(true);
-const sort = ref("score");
+const sortBy = ref("score");
+const order = ref("desc");
 const page = ref(0);
 const hasMore = ref(true);
 const pageSize = 50;
@@ -77,7 +78,8 @@ async function loadPosts(reset = false) {
   loadingPosts.value = true;
   const params: Record<string, string | number> = {
     subreddit_id: subredditId.value,
-    sort: sort.value,
+    sort_by: sortBy.value,
+    order: order.value,
     limit: pageSize,
     offset: page.value * pageSize,
   };
@@ -170,7 +172,8 @@ function getThumbUrl(post: any): string | undefined {
 const exportCsv = computed(() => stats.value ? api.exportPostsUrl(stats.value.name, "csv") : "#");
 const exportJson = computed(() => stats.value ? api.exportPostsUrl(stats.value.name, "json") : "#");
 
-watch(sort, () => loadPosts(true));
+watch(sortBy, () => loadPosts(true));
+watch(order, () => loadPosts(true));
 
 onUnmounted(closeEventSource);
 </script>
@@ -265,11 +268,14 @@ onUnmounted(closeEventSource);
         <div class="section-header">
           <h2>Posts</h2>
           <div class="section-actions">
-            <select v-model="sort">
-              <option value="score">Top by Score</option>
-              <option value="new">Newest</option>
-              <option value="comments">Most Comments</option>
+            <select v-model="sortBy">
+              <option value="score">Score</option>
+              <option value="date">Date</option>
+              <option value="comments">Comments</option>
             </select>
+            <button class="btn-order" :class="{ asc: order === 'asc' }" @click="order = order === 'desc' ? 'asc' : 'desc'">
+              {{ order === 'desc' ? '↓ Desc' : '↑ Asc' }}
+            </button>
             <div class="export-group">
               <span class="export-label">Export:</span>
               <a :href="exportCsv" class="btn-export" download>CSV</a>
@@ -614,5 +620,17 @@ onUnmounted(closeEventSource);
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .sub-header { flex-direction: column; gap: 0.75rem; align-items: flex-start; }
   .section-header { flex-direction: column; gap: 0.5rem; align-items: flex-start; }
+.btn-order {
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-order:hover { background: var(--bg-hover); color: var(--text); }
+.btn-order.asc { border-color: var(--blue); color: var(--text); }
 }
 </style>

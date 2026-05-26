@@ -191,9 +191,9 @@ class TestCombinedFilters:
         assert len(data) == 1
         assert data[0]["score"] == 300
 
-    def test_subreddit_with_sort_new(self, client, seed_data):
+    def test_subreddit_with_sort_date(self, client, seed_data):
         resp = client.get("/api/posts", params={
-            "subreddit": "python", "sort": "new",
+            "subreddit": "python", "sort_by": "date",
         })
         assert resp.status_code == 200
         data = resp.json()

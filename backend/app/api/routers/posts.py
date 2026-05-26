@@ -20,7 +20,8 @@ def list_posts(
     subreddit: str | None = Query(None, description="Filter by subreddit name (case-insensitive)"),
     min_score: int | None = Query(None, description="Minimum post score (inclusive)"),
     max_score: int | None = Query(None, description="Maximum post score (inclusive)"),
-    sort: str = Query("score", pattern="^(score|new|comments)$"),
+    sort_by: str = Query("score", pattern="^(score|date|comments)$"),
+    order: str = Query("desc", pattern="^(asc|desc)$"),
     since: str | None = Query(None, pattern="^(24h|7d|30d|all)$"),
     limit: int = Query(50, le=200),
     offset: int = Query(0, ge=0),
@@ -48,12 +49,12 @@ def list_posts(
         cutoff = datetime.utcnow() - since_deltas[since]
         query = query.filter(Post.scraped_at >= cutoff)
 
-    if sort == "score":
-        query = query.order_by(Post.score.desc())
-    elif sort == "new":
-        query = query.order_by(Post.scraped_at.desc())
-    elif sort == "comments":
-        query = query.order_by(Post.num_comments.desc())
+    sort_col = (
+        Post.score if sort_by == "score"
+        else Post.scraped_at if sort_by == "date"
+        else Post.num_comments
+    )
+    query = query.order_by(sort_col.desc() if order == "desc" else sort_col.asc())
 
     return query.offset(offset).limit(limit).all()
 
@@ -184,19 +185,20 @@ def get_thumbnail(reddit_id: str, db: Session = Depends(get_db)):
 def search_posts(
     q: str = Query(..., min_length=2),
     subreddit_id: int | None = Query(None),
-    sort: str = Query("score", pattern="^(score|new|comments)$"),
+    sort_by: str = Query("score", pattern="^(score|date|comments)$"),
+    order: str = Query("desc", pattern="^(asc|desc)$"),
     limit: int = Query(50, le=200),
     db: Session = Depends(get_db),
 ):
     query = db.query(Post).options(joinedload(Post.subreddit)).filter(Post.title.ilike(f"%{q}%"))
     if subreddit_id:
         query = query.filter(Post.subreddit_id == subreddit_id)
-    if sort == "score":
-        query = query.order_by(Post.score.desc())
-    elif sort == "new":
-        query = query.order_by(Post.scraped_at.desc())
-    elif sort == "comments":
-        query = query.order_by(Post.num_comments.desc())
+    sort_col = (
+        Post.score if sort_by == "score"
+        else Post.scraped_at if sort_by == "date"
+        else Post.num_comments
+    )
+    query = query.order_by(sort_col.desc() if order == "desc" else sort_col.asc())
     results = query.limit(limit).all()
     return results
 
