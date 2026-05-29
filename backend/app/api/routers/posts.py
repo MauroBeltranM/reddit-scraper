@@ -181,6 +181,21 @@ def get_thumbnail(reddit_id: str, db: Session = Depends(get_db)):
     return FileResponse(thumb_path, media_type="image/jpeg")
 
 
+@router.delete("/posts/{post_id}", status_code=204)
+def delete_post(post_id: int, db: Session = Depends(get_db)):
+    """Delete a post and its associated comments and snapshots (cascade)."""
+    post = db.query(Post).get(post_id)
+    if not post:
+        raise HTTPException(404, "Post not found")
+
+    # Delete children explicitly (no ORM cascade configured)
+    db.query(Comment).filter(Comment.post_id == post_id).delete()
+    db.query(Snapshot).filter(Snapshot.post_id == post_id).delete()
+    db.delete(post)
+    db.commit()
+    return None
+
+
 @router.get("/posts/search")
 def search_posts(
     q: str = Query(..., min_length=2),

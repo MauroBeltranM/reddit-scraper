@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from "vue";
-import { useRoute, RouterLink } from "vue-router";
+import { useRoute, useRouter, RouterLink } from "vue-router";
 import { Chart, registerables } from "chart.js";
 import api from "../api";
 
@@ -23,6 +23,7 @@ interface Snapshot {
 }
 
 const route = useRoute();
+const router = useRouter();
 const post = ref<any>(null);
 const comments = ref<Comment[]>([]);
 const snapshots = ref<Snapshot[]>([]);
@@ -168,6 +169,17 @@ async function loadMoreComments() {
   commentsLoading.value = false;
 }
 
+async function deletePost() {
+  if (!post.value) return;
+  if (!confirm(`Delete post "${post.value.title}"? This will also remove all its comments and snapshots.`)) return;
+  try {
+    await api.deletePost(post.value.id);
+    router.push("/posts");
+  } catch (err: any) {
+    alert(err?.response?.data?.detail || "Failed to delete post");
+  }
+}
+
 onMounted(async () => {
   const id = Number(route.params.id);
   const [postData, snapData] = await Promise.all([
@@ -216,6 +228,7 @@ onMounted(async () => {
             <a :href="'https://reddit.com' + post.permalink" target="_blank" class="reddit-link">
               Open on Reddit ↗
             </a>
+            <button class="btn-delete-post" @click="deletePost">🗑 Delete</button>
           </div>
         </div>
       </div>
@@ -401,6 +414,21 @@ export default { components: { CommentTree } };
 .reddit-link {
   color: var(--blue);
   font-weight: 500;
+}
+
+.btn-delete-post {
+  padding: 0.25rem 0.6rem;
+  background: transparent;
+  border: 1px solid #f85149;
+  color: #f85149;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+.btn-delete-post:hover {
+  background: #f8514920;
 }
 
 .selftext {

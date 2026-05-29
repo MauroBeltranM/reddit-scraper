@@ -30,6 +30,7 @@ export default {
   getPostComments: (id: number, limit = 20, offset = 0) =>
     api.get(`/posts/${id}/comments`, { params: { limit, offset } }).then((r) => r.data),
   getPostSnapshots: (id: number) => api.get(`/posts/${id}/snapshots`).then((r) => r.data),
+  deletePost: (id: number) => api.delete(`/posts/${id}`),
 
   // Search
   searchPosts: (q: string, subredditId?: number, sort?: string) =>
