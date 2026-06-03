@@ -143,3 +143,27 @@ class TestDeletePost:
 
         resp2 = client.delete(f"/api/posts/{post_id}")
         assert resp2.status_code == 404
+
+    def test_delete_removes_thumbnail_file(self, client, db_session, seeded_post, tmp_path, monkeypatch):
+        from backend.app.api.routers import posts as posts_module
+
+        monkeypatch.setattr(posts_module, "THUMBNAIL_DIR", tmp_path)
+
+        post = seeded_post["post"]
+        thumb_file = tmp_path / "test_thumb.jpg"
+        thumb_file.write_bytes(b"fake image data")
+        post.local_thumbnail = "test_thumb.jpg"
+        db_session.commit()
+
+        assert thumb_file.exists()
+        resp = client.delete(f"/api/posts/{post.id}")
+        assert resp.status_code == 204
+        assert not thumb_file.exists()
+
+    def test_delete_without_thumbnail_no_error(self, client, db_session, seeded_post):
+        post = seeded_post["post"]
+        post.local_thumbnail = None
+        db_session.commit()
+
+        resp = client.delete(f"/api/posts/{post.id}")
+        assert resp.status_code == 204

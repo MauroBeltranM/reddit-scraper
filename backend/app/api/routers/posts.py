@@ -183,10 +183,16 @@ def get_thumbnail(reddit_id: str, db: Session = Depends(get_db)):
 
 @router.delete("/posts/{post_id}", status_code=204)
 def delete_post(post_id: int, db: Session = Depends(get_db)):
-    """Delete a post and its associated comments and snapshots (cascade)."""
+    """Delete a post and its associated comments, snapshots, and thumbnail (cascade)."""
     post = db.query(Post).get(post_id)
     if not post:
         raise HTTPException(404, "Post not found")
+
+    # Delete physical thumbnail file if it exists
+    if post.local_thumbnail:
+        thumb_path = THUMBNAIL_DIR / post.local_thumbnail
+        if thumb_path.exists():
+            thumb_path.unlink()
 
     # Delete children explicitly (no ORM cascade configured)
     db.query(Comment).filter(Comment.post_id == post_id).delete()
