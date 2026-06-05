@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
+import sqlalchemy as sa
 from sqlalchemy.orm import Session, joinedload
 
 from backend.app.db.session import get_db
@@ -57,6 +58,108 @@ def list_posts(
     query = query.order_by(sort_col.desc() if order == "desc" else sort_col.asc())
 
     return query.offset(offset).limit(limit).all()
+
+
+@router.get("/posts/search")
+def search_posts(
+    q: str = Query(..., min_length=2),
+    subreddit_id: int | None = Query(None),
+    language: str = Query("spanish", pattern="^(spanish|english)$"),
+    sort_by: str = Query("score", pattern="^(score|date|comments)$"),
+    order: str = Query("desc", pattern="^(asc|desc)$"),
+    limit: int = Query(50, le=200),
+    db: Session = Depends(get_db),
+):
+    """Search posts by title and body using full-text search (PostgreSQL) or LIKE fallback (SQLite).
+
+    For PostgreSQL: uses tsvector columns with GIN index for fast FTS.
+    Short queries (<3 chars) always fall back to LIKE regardless of dialect.
+    """
+    base_query = db.query(Post).options(joinedload(Post.subreddit))
+
+    if subreddit_id:
+        base_query = base_query.filter(Post.subreddit_id == subreddit_id)
+
+    # Decide search strategy
+    use_fts = (
+        len(q) >= 3
+        and db.bind.dialect.name == "postgresql"
+    )
+
+    if use_fts:
+        # Full-text search using tsvector columns
+        ts_query = sa.func.plainto_tsquery(language, q)
+        base_query = base_query.filter(
+            sa.or_(
+                Post.body_tsvector.op("@@")(ts_query),
+                Post.title_tsvector.op("@@")(ts_query),
+            )
+        )
+        # Rank by FTS relevance when sorting by score
+        if sort_by == "score":
+            rank = sa.func.ts_rank_cd(Post.body_tsvector, ts_query).label("rank")
+            base_query = base_query.add_columns(rank).order_by(
+                rank.desc() if order == "desc" else rank.asc()
+            )
+        else:
+            sort_col = (
+                Post.scraped_at if sort_by == "date"
+                else Post.num_comments
+            )
+            base_query = base_query.order_by(
+                sort_col.desc() if order == "desc" else sort_col.asc()
+            )
+    else:
+        # LIKE fallback for SQLite or short queries
+        pattern = f"%{q}%"
+        base_query = base_query.filter(
+            sa.or_(
+                Post.title.ilike(pattern),
+                Post.selftext.ilike(pattern),
+            )
+        )
+        sort_col = (
+            Post.score if sort_by == "score"
+            else Post.scraped_at if sort_by == "date"
+            else Post.num_comments
+        )
+        base_query = base_query.order_by(
+            sort_col.desc() if order == "desc" else sort_col.asc()
+        )
+
+    results = base_query.limit(limit).all()
+
+    # If FTS added a rank column, unpack to just Post objects
+    if use_fts and sort_by == "score":
+        results = [row[0] for row in results]
+
+    return results
+
+
+@router.get("/comments/search")
+def search_comments(
+    q: str = Query(..., min_length=2),
+    subreddit_id: int | None = Query(None),
+    limit: int = Query(50, le=200),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Comment).filter(Comment.body.ilike(f"%{q}%"))
+    if subreddit_id:
+        post_ids = db.query(Post.id).filter(Post.subreddit_id == subreddit_id).subquery()
+        query = query.filter(Comment.post_id.in_(post_ids))
+    results = query.order_by(Comment.score.desc()).limit(limit).all()
+    return [
+        {
+            "id": c.id,
+            "reddit_id": c.reddit_id,
+            "post_id": c.post_id,
+            "author": c.author,
+            "score": c.score,
+            "body": c.body[:300] + ("..." if len(c.body) > 300 else ""),
+            "depth": c.depth,
+        }
+        for c in results
+    ]
 
 
 @router.get("/posts/{post_id}", response_model=PostRead)
@@ -200,51 +303,3 @@ def delete_post(post_id: int, db: Session = Depends(get_db)):
     db.delete(post)
     db.commit()
     return None
-
-
-@router.get("/posts/search")
-def search_posts(
-    q: str = Query(..., min_length=2),
-    subreddit_id: int | None = Query(None),
-    sort_by: str = Query("score", pattern="^(score|date|comments)$"),
-    order: str = Query("desc", pattern="^(asc|desc)$"),
-    limit: int = Query(50, le=200),
-    db: Session = Depends(get_db),
-):
-    query = db.query(Post).options(joinedload(Post.subreddit)).filter(Post.title.ilike(f"%{q}%"))
-    if subreddit_id:
-        query = query.filter(Post.subreddit_id == subreddit_id)
-    sort_col = (
-        Post.score if sort_by == "score"
-        else Post.scraped_at if sort_by == "date"
-        else Post.num_comments
-    )
-    query = query.order_by(sort_col.desc() if order == "desc" else sort_col.asc())
-    results = query.limit(limit).all()
-    return results
-
-
-@router.get("/comments/search")
-def search_comments(
-    q: str = Query(..., min_length=2),
-    subreddit_id: int | None = Query(None),
-    limit: int = Query(50, le=200),
-    db: Session = Depends(get_db),
-):
-    query = db.query(Comment).filter(Comment.body.ilike(f"%{q}%"))
-    if subreddit_id:
-        post_ids = db.query(Post.id).filter(Post.subreddit_id == subreddit_id).subquery()
-        query = query.filter(Comment.post_id.in_(post_ids))
-    results = query.order_by(Comment.score.desc()).limit(limit).all()
-    return [
-        {
-            "id": c.id,
-            "reddit_id": c.reddit_id,
-            "post_id": c.post_id,
-            "author": c.author,
-            "score": c.score,
-            "body": c.body[:300] + ("..." if len(c.body) > 300 else ""),
-            "depth": c.depth,
-        }
-        for c in results
-    ]
