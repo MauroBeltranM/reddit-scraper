@@ -70,6 +70,8 @@ function buildScoreChart() {
   const accent = cssStyle.getPropertyValue("--accent").trim() || "#ff4500";
   const blue = cssStyle.getPropertyValue("--blue").trim() || "#58a6ff";
   const muted = cssStyle.getPropertyValue("--text-muted").trim() || "#8b949e";
+  const bgColor = cssStyle.getPropertyValue("--bg-card").trim() || "#161b22";
+  const textColor = cssStyle.getPropertyValue("--text").trim() || "#e6edf3";
   const borderColor = cssStyle.getPropertyValue("--border").trim() || "#30363d";
 
   scoreChart.value = new Chart(scoreChartCanvas.value, {
@@ -120,9 +122,9 @@ function buildScoreChart() {
           },
         },
         tooltip: {
-          backgroundColor: "#161b22",
-          titleColor: "#e6edf3",
-          bodyColor: "#e6edf3",
+          backgroundColor: bgColor,
+          titleColor: textColor,
+          bodyColor: textColor,
           borderColor,
           borderWidth: 1,
           padding: 10,
@@ -404,11 +406,11 @@ export default { components: { CommentTree } };
   background: var(--bg-hover);
 }
 
-.type-badge.selftext { color: #3fb950; }
-.type-badge.link { color: #58a6ff; }
-.type-badge.image { color: #bc8cff; }
-.type-badge.video { color: #f0883e; }
-.type-badge.gallery { color: #e3b341; }
+.type-badge.selftext { color: var(--green); }
+.type-badge.link { color: var(--blue); }
+.type-badge.image { color: #9b6dd7; }
+.type-badge.video { color: #d4762c; }
+.type-badge.gallery { color: #b89a1f; }
 
 .sub { color: var(--accent); font-weight: 500; }
 .author { color: var(--blue); }
@@ -421,8 +423,8 @@ export default { components: { CommentTree } };
 .btn-delete-post {
   padding: 0.25rem 0.6rem;
   background: transparent;
-  border: 1px solid #f85149;
-  color: #f85149;
+  border: 1px solid var(--accent);
+  color: var(--accent);
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.8rem;
@@ -430,7 +432,8 @@ export default { components: { CommentTree } };
   transition: all 0.15s;
 }
 .btn-delete-post:hover {
-  background: #f8514920;
+  background: var(--accent);
+  opacity: 0.12;
 }
 
 .selftext {

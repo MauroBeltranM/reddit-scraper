@@ -373,12 +373,13 @@ h1 { margin-bottom: 1rem; }
 
 .btn-danger {
   background: transparent;
-  color: #f85149;
-  border: 1px solid #f85149;
+  color: var(--accent);
+  border: 1px solid var(--accent);
 }
 
 .btn-danger:hover {
-  background: #f8514920;
+  background: var(--accent);
+  opacity: 0.12;
 }
 
 .result-box {

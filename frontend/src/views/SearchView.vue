@@ -291,7 +291,8 @@ h1 { margin-bottom: 1rem; }
 .post-body h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.25rem; }
 
 .post-body h3 :deep(mark) {
-  background: #ff450040;
+  background: var(--accent);
+  opacity: 0.25;
   color: var(--text);
   border-radius: 2px;
   padding: 0 2px;
@@ -326,7 +327,8 @@ h1 { margin-bottom: 1rem; }
 }
 
 .result-body :deep(mark) {
-  background: #ff450040;
+  background: var(--accent);
+  opacity: 0.25;
   color: var(--text);
   border-radius: 2px;
   padding: 0 2px;

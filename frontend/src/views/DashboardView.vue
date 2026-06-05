@@ -43,25 +43,25 @@ const defaultChartOptions = {
   plugins: {
     legend: { display: false },
     tooltip: {
-      backgroundColor: "#161b22",
-      borderColor: "#30363d",
+      backgroundColor: "var(--bg-card)",
+      borderColor: "var(--border)",
       borderWidth: 1,
-      titleColor: "#e6edf3",
-      bodyColor: "#8b949e",
+      titleColor: "var(--text)",
+      bodyColor: "var(--text-muted)",
       padding: 10,
       cornerRadius: 6,
     },
   },
   scales: {
     x: {
-      ticks: { color: "#8b949e", maxRotation: 45 },
-      grid: { color: "#30363d44" },
-      border: { color: "#30363d" },
+      ticks: { color: "var(--text-muted)", maxRotation: 45 },
+      grid: { color: "var(--border)" },
+      border: { color: "var(--border)" },
     },
     y: {
-      ticks: { color: "#8b949e" },
-      grid: { color: "#30363d44" },
-      border: { color: "#30363d" },
+      ticks: { color: "var(--text-muted)" },
+      grid: { color: "var(--border)" },
+      border: { color: "var(--border)" },
     },
   },
 };
@@ -83,8 +83,8 @@ function buildCharts(data: {
         {
           label: "Posts",
           data: subCounts,
-          backgroundColor: "#ff450088",
-          borderColor: "#ff4500",
+          backgroundColor: "var(--accent)",
+          borderColor: "var(--accent)",
           borderWidth: 1,
           borderRadius: 4,
         },
@@ -114,8 +114,8 @@ function buildCharts(data: {
         {
           label: "Score",
           data: topScores,
-          backgroundColor: "#58a6ff88",
-          borderColor: "#58a6ff",
+          backgroundColor: "var(--blue)",
+          borderColor: "var(--blue)",
           borderWidth: 1,
           borderRadius: 4,
         },
@@ -154,12 +154,12 @@ function buildCharts(data: {
         {
           label: "Posts scraped",
           data: tlCounts,
-          borderColor: "#3fb950",
-          backgroundColor: "#3fb95022",
+          borderColor: "var(--green)",
+          backgroundColor: "var(--green)",
           fill: true,
           tension: 0.3,
           pointRadius: 3,
-          pointBackgroundColor: "#3fb950",
+          pointBackgroundColor: "var(--green)",
         },
       ],
     },
@@ -326,9 +326,9 @@ h1 {
 }
 
 .charts-error {
-  background: #3d1f1f;
-  border: 1px solid #6e3030;
-  color: #f07070;
+  background: var(--bg-card);
+  border: 1px solid var(--accent);
+  color: var(--accent);
   padding: 0.75rem 1rem;
   border-radius: 6px;
   margin-bottom: 1rem;

@@ -255,13 +255,13 @@ h1 {
 }
 
 .status-dot.connected {
-  background: #3fb950;
-  box-shadow: 0 0 6px #3fb95066;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
 }
 
 .status-dot.disconnected {
-  background: #f85149;
-  box-shadow: 0 0 6px #f8514966;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
 }
 
 .status-text {
@@ -291,11 +291,11 @@ h1 {
 }
 
 .field-status .ok {
-  color: #3fb950;
+  color: var(--green);
 }
 
 .field-status .missing {
-  color: #f85149;
+  color: var(--accent);
 }
 
 .oauth-hint {
@@ -396,10 +396,10 @@ h1 {
 }
 
 .error-msg {
-  color: #f85149;
+  color: var(--accent);
   font-size: 0.85rem;
   padding: 0.5rem;
-  background: #f8514915;
+  background: var(--bg-hover);
   border-radius: 6px;
   margin-bottom: 1rem;
 }

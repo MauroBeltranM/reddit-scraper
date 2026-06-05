@@ -381,9 +381,11 @@ onUnmounted(closeEventSource);
   border: 1px solid var(--border);
 }
 .status-badge.active {
-  background: #3fb95020;
+  background: var(--green);
+  opacity: 0.12;
   color: var(--green);
-  border-color: #3fb95040;
+  border-color: var(--green);
+  opacity: 0.4;
 }
 
 /* Stats grid */
@@ -420,14 +422,14 @@ onUnmounted(closeEventSource);
   align-items: center;
   gap: 0.75rem;
   background: var(--bg-card);
-  border: 1px solid #daa52040;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.75rem 1rem;
   margin-bottom: 1.5rem;
 }
 .top-label {
   font-size: 0.8rem;
-  color: #daa520;
+  color: var(--accent);
   white-space: nowrap;
 }
 .top-title {
@@ -614,7 +616,7 @@ onUnmounted(closeEventSource);
 .load-more:hover { background: var(--bg-hover); }
 .empty { color: var(--text-muted); text-align: center; padding: 2rem; }
 .loading { color: var(--text-muted); }
-.error { color: #f85149; padding: 2rem; text-align: center; }
+.error { color: var(--accent); padding: 2rem; text-align: center; }
 
 @media (max-width: 700px) {
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
