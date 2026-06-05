@@ -13,6 +13,7 @@ const since = ref("all");
 const currentSubredditId = ref<number | null>(null);
 const minScore = ref<number | null>(null);
 const maxScore = ref<number | null>(null);
+const postTypeFilter = ref<string | null>(null);
 const compact = ref(false);
 const page = ref(0);
 const hasMore = ref(true);
@@ -49,6 +50,7 @@ async function loadPosts(reset = false) {
   if (since.value && since.value !== "all") params.since = since.value;
   if (minScore.value !== null) params.min_score = minScore.value;
   if (maxScore.value !== null) params.max_score = maxScore.value;
+  if (postTypeFilter.value) params.post_type = postTypeFilter.value;
 
   const batch = await api.getPosts(params);
   posts.value.push(...batch);
@@ -71,9 +73,10 @@ function timeAgo(dateStr: string) {
 function typeColor(type: string) {
   const colors: Record<string, string> = {
     link: "#58a6ff",
-    self: "#3fb950",
+    selftext: "#3fb950",
     image: "#bc8cff",
     video: "#f0883e",
+    gallery: "#e3b341",
   };
   return colors[type] || "var(--text-muted)";
 }
@@ -90,6 +93,7 @@ const activeFilterCount = computed(() => {
   if (minScore.value !== null) n++;
   if (maxScore.value !== null) n++;
   if (since.value !== "all") n++;
+  if (postTypeFilter.value !== null) n++;
   return n;
 });
 
@@ -98,6 +102,7 @@ function resetFilters() {
   currentSubredditId.value = null;
   minScore.value = null;
   maxScore.value = null;
+  postTypeFilter.value = null;
   sortBy.value = "score";
   order.value = "desc";
 }
@@ -110,6 +115,7 @@ watch(sortBy, () => loadPosts(true));
 watch(order, () => loadPosts(true));
 watch(since, () => loadPosts(true));
 watch(currentSubredditId, () => loadPosts(true));
+watch(postTypeFilter, () => loadPosts(true));
 </script>
 
 <template>
@@ -157,6 +163,14 @@ watch(currentSubredditId, () => loadPosts(true));
       <button class="btn-toggle-compact" :class="{ active: compact }" @click="compact = !compact">
         {{ compact ? '☷ Normal' : '⊟ Compact' }}
       </button>
+      <select v-model="postTypeFilter">
+        <option :value="null">All types</option>
+        <option value="selftext">💬 Selftext</option>
+        <option value="image">🖼 Image</option>
+        <option value="video">🎬 Video</option>
+        <option value="gallery">🖼 Gallery</option>
+        <option value="link">🔗 Link</option>
+      </select>
       <button
         v-if="activeFilterCount > 0"
         class="btn-reset"
@@ -194,7 +208,7 @@ watch(currentSubredditId, () => loadPosts(true));
           loading="lazy"
         />
         <div v-else class="post-thumb-placeholder" :class="{ compact }">
-          <span>{{ post.post_type === 'image' ? '🖼' : post.post_type === 'video' ? '🎬' : '📄' }}</span>
+          <span>{{ post.post_type === 'image' ? '🖼' : post.post_type === 'video' ? '🎬' : post.post_type === 'gallery' ? '🖼' : post.post_type === 'selftext' ? '💬' : '📄' }}</span>
         </div>
         <div class="post-body">
           <div class="post-title-row">

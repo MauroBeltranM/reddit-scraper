@@ -209,8 +209,8 @@ onMounted(async () => {
           alt=""
           class="post-detail-thumb"
         />
-        <div v-else-if="post.post_type === 'image' || post.post_type === 'link'" class="post-detail-thumb-placeholder">
-          <span>{{ post.post_type === 'image' ? '🖼' : '🔗' }}</span>
+        <div v-else-if="post.post_type === 'image' || post.post_type === 'gallery' || post.post_type === 'link'" class="post-detail-thumb-placeholder">
+          <span>{{ post.post_type === 'image' || post.post_type === 'gallery' ? '🖼' : '🔗' }}</span>
         </div>
         <div class="post-header-text">
           <h1 class="post-title">{{ post.title }}</h1>
@@ -404,9 +404,11 @@ export default { components: { CommentTree } };
   background: var(--bg-hover);
 }
 
-.type-badge.self { color: #3fb950; }
+.type-badge.selftext { color: #3fb950; }
 .type-badge.link { color: #58a6ff; }
 .type-badge.image { color: #bc8cff; }
+.type-badge.video { color: #f0883e; }
+.type-badge.gallery { color: #e3b341; }
 
 .sub { color: var(--accent); font-weight: 500; }
 .author { color: var(--blue); }

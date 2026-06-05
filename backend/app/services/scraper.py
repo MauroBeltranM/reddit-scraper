@@ -17,6 +17,45 @@ from app.services.reddit_auth import get_reddit_token
 logger = logging.getLogger(__name__)
 
 REDDIT_BASE = "https://www.reddit.com"
+
+
+# Image-hosting domains commonly used for single-image Reddit posts
+_IMAGE_DOMAINS = frozenset({
+    "i.redd.it", "i.imgur.com", "preview.redd.it",
+})
+
+
+def detect_post_type(post_data: dict) -> str:
+    """Infer the type of a Reddit post from its raw JSON data.
+
+    Returns one of: ``selftext``, ``image``, ``video``, ``gallery``, ``link``.
+
+    Detection priority:
+    1. ``is_self`` → selftext
+    2. ``is_video`` → video
+    3. ``media_metadata`` present (gallery) → gallery
+    4. ``post_hint == 'image'`` or URL on known image host → image
+    5. Everything else → link
+    """
+    if post_data.get("is_self"):
+        return "selftext"
+    if post_data.get("is_video"):
+        return "video"
+    # Gallery: Reddit includes media_metadata dict with multiple images
+    if post_data.get("media_metadata") and isinstance(post_data["media_metadata"], dict):
+        return "gallery"
+    if post_data.get("post_hint") == "image":
+        return "image"
+    url = post_data.get("url", "")
+    # Check if URL points to a known image host
+    try:
+        from urllib.parse import urlparse
+        host = urlparse(url).hostname or ""
+        if host in _IMAGE_DOMAINS:
+            return "image"
+    except Exception:
+        pass
+    return "link"
 USER_AGENT = "Mozilla/5.0 (compatible; RedditScraper/0.1)"
 REQUEST_DELAY = 1.0  # seconds between requests
 MAX_COMMENT_DEPTH = 10
@@ -334,13 +373,7 @@ class RedditScraper:
             d = child["data"]
 
             # Determine post type
-            post_type = "link"
-            if d.get("is_self"):
-                post_type = "self"
-            elif d.get("is_video"):
-                post_type = "video"
-            elif d.get("post_hint") == "image":
-                post_type = "image"
+            post_type = detect_post_type(d)
 
             posts.append({
                 "reddit_id": d["id"],

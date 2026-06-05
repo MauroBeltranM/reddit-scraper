@@ -140,7 +140,7 @@ class TestFetchPosts:
         with patch.object(scraper.client, "get", return_value=mock_resp):
             posts = scraper._fetch_posts("python")
 
-        assert posts[0]["post_type"] == "self"
+        assert posts[0]["post_type"] == "selftext"
 
     def test_fetch_posts_detects_image_post(self):
         scraper = RedditScraper()

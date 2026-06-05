@@ -21,6 +21,7 @@ def list_posts(
     subreddit: str | None = Query(None, description="Filter by subreddit name (case-insensitive)"),
     min_score: int | None = Query(None, description="Minimum post score (inclusive)"),
     max_score: int | None = Query(None, description="Maximum post score (inclusive)"),
+    post_type: str | None = Query(None, description="Filter by post type: selftext, image, video, gallery, link"),
     sort_by: str = Query("score", pattern="^(score|date|comments)$"),
     order: str = Query("desc", pattern="^(asc|desc)$"),
     since: str | None = Query(None, pattern="^(24h|7d|30d|all)$"),
@@ -44,6 +45,9 @@ def list_posts(
 
     if max_score is not None:
         query = query.filter(Post.score <= max_score)
+
+    if post_type:
+        query = query.filter(Post.post_type == post_type)
 
     since_deltas = {"24h": timedelta(hours=24), "7d": timedelta(days=7), "30d": timedelta(days=30)}
     if since and since != "all":
